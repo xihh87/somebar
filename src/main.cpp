@@ -11,18 +11,18 @@
 #include "qnamespace.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
+#include "common.hpp"
+#include "shm_buffer.hpp"
 
 constexpr uint32_t barSize = 20;
 
-static void waylandFlush();
 static void waylandWriteReady();
 static void requireGlobal(const void *p, const char *name);
 
-// wayland globals
-static wl_display *display;
-static wl_compositor *compositor;
-static wl_shm *shm;
-static zwlr_layer_shell_v1 *wlrLayerShell;
+wl_display *display;
+wl_compositor *compositor;
+wl_shm *shm;
+zwlr_layer_shell_v1 *wlrLayerShell;
 static QSocketNotifier *displayWriteNotifier;
 
 static xdg_wm_base *xdgWmBase;
@@ -33,37 +33,25 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
     }
 };
 
-static const struct wl_buffer_listener wlBufferListener {
-    [](void*, wl_buffer *buffer) {
-        wl_buffer_destroy(buffer);
-    }
-};
-
 // app globals
 static wl_surface *surface;
 static zwlr_layer_surface_v1 *layerSurface;
 static const struct wl_surface_listener surfaceListener = {
     // todo
 };
+static ShmBuffer *xbuf;
 static const struct zwlr_layer_surface_v1_listener layerSurfaceListener = {
     [](void*, zwlr_layer_surface_v1 *layerSurface, uint32_t serial, uint32_t width, uint32_t height) {
         zwlr_layer_surface_v1_ack_configure(layerSurface, serial);
         printf("configured to %d x %d\n", width, height);
-        auto stride = width * 4;
-        auto size = stride * height;
-        auto fd = memfd_create("somebar-surface", MFD_CLOEXEC);
-        ftruncate(fd, size);
-        auto buffer = reinterpret_cast<char*>(mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
-        auto pool = wl_shm_create_pool(shm, fd, size);
-        auto wlBuffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
-        wl_shm_pool_destroy(pool);
-        close(fd);
+        xbuf = new ShmBuffer(width, height, WL_SHM_FORMAT_XRGB8888);
+        auto buffer = xbuf->data();
 
         auto w = 2*M_PI/(width / 10);
         for (auto x = 0; x < width; x++) {
             auto val = 255*(sin(x*w)/2+0.5);
             for (auto y = 0; y < height; y++) {
-                auto p = &buffer[y*stride+x*4];
+                auto p = &buffer[y*xbuf->stride+x*4];
                 *p++ = 0;
                 *p++ = 0;
                 *p++ = val;
@@ -71,8 +59,7 @@ static const struct zwlr_layer_surface_v1_listener layerSurfaceListener = {
             }
         }
 
-        wl_buffer_add_listener(wlBuffer, &wlBufferListener, nullptr);
-        wl_surface_attach(surface, wlBuffer, 0, 0);
+        wl_surface_attach(surface, xbuf->buffer(), 0, 0);
         wl_surface_commit(surface);
         waylandFlush();
     }
@@ -156,7 +143,7 @@ int main(int argc, char **argv)
     return app.exec();
 }
 
-static void waylandFlush()
+void waylandFlush()
 {
     wl_display_dispatch_pending(display);
     if (wl_display_flush(display) < 0 && errno == EAGAIN) {
