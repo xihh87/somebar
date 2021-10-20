@@ -12,6 +12,7 @@ executable('somebar',
   'src/main.cpp',
   'src/shm_buffer.cpp',
   'src/bar.cpp',
+  'src/bar_widget.cpp',
   wayland_sources,
   #moc,
   dependencies: [qt5_dep, wayland_dep])

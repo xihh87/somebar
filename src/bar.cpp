@@ -1,8 +1,7 @@
 // somebar - dwl bar
 // See LICENSE file for copyright and license details.
 
-#include <cstdio>
-#include <cstring>
+#include <QImage>
 #include "bar.hpp"
 #include "config.hpp"
 
@@ -34,11 +33,25 @@ Bar::~Bar()
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
 {
     zwlr_layer_surface_v1_ack_configure(_layerSurface, serial);
-    printf("configure: %d x %d\n", width, height);
-
     _bufs.emplace(width, height, WL_SHM_FORMAT_XRGB8888);
-    memset(_bufs->data(), 0xff, _bufs->stride*_bufs->height);
+    auto root = _widget.root();
+    root->setFixedSize(width, height);
+    render();
+}
+
+void Bar::render()
+{
+    auto img = QImage {
+        _bufs->data(),
+        _bufs->width,
+        _bufs->height,
+        _bufs->stride,
+        QImage::Format_RGBX8888
+    };
+    auto root = _widget.root();
+    root->render(&img);
     wl_surface_attach(_surface, _bufs->buffer(), 0, 0);
     wl_surface_commit(_surface);
+    _bufs->flip();
     waylandFlush();
 }
