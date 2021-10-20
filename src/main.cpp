@@ -12,9 +12,7 @@
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "common.hpp"
-#include "shm_buffer.hpp"
-
-constexpr uint32_t barSize = 20;
+#include "bar.hpp"
 
 static void waylandWriteReady();
 static void requireGlobal(const void *p, const char *name);
@@ -33,51 +31,13 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
     }
 };
 
-// app globals
-static wl_surface *surface;
-static zwlr_layer_surface_v1 *layerSurface;
-static const struct wl_surface_listener surfaceListener = {
-    // todo
-};
-static ShmBuffer *xbuf;
-static const struct zwlr_layer_surface_v1_listener layerSurfaceListener = {
-    [](void*, zwlr_layer_surface_v1 *layerSurface, uint32_t serial, uint32_t width, uint32_t height) {
-        zwlr_layer_surface_v1_ack_configure(layerSurface, serial);
-        printf("configured to %d x %d\n", width, height);
-        xbuf = new ShmBuffer(width, height, WL_SHM_FORMAT_XRGB8888);
-        auto buffer = xbuf->data();
-
-        auto w = 2*M_PI/(width / 10);
-        for (auto x = 0; x < width; x++) {
-            auto val = 255*(sin(x*w)/2+0.5);
-            for (auto y = 0; y < height; y++) {
-                auto p = &buffer[y*xbuf->stride+x*4];
-                *p++ = 0;
-                *p++ = 0;
-                *p++ = val;
-                *p++ = val;
-            }
-        }
-
-        wl_surface_attach(surface, xbuf->buffer(), 0, 0);
-        wl_surface_commit(surface);
-        waylandFlush();
-    }
-};
-
 // called after we have received the initial batch of globals
 static void onReady()
 {
     requireGlobal(compositor, "wl_compositor");
     requireGlobal(shm, "wl_shm");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
-    surface = wl_compositor_create_surface(compositor);
-    layerSurface = zwlr_layer_shell_v1_get_layer_surface(wlrLayerShell, surface, nullptr, ZWLR_LAYER_SHELL_V1_LAYER_TOP, "net.tapesoftware.Somebar");
-    zwlr_layer_surface_v1_add_listener(layerSurface, &layerSurfaceListener, nullptr);
-    zwlr_layer_surface_v1_set_anchor(layerSurface, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-    zwlr_layer_surface_v1_set_size(layerSurface, 0, barSize);
-    zwlr_layer_surface_v1_set_exclusive_zone(layerSurface, barSize);
-    wl_surface_commit(surface);
+    std::ignore = new Bar(nullptr);
     waylandFlush();
 }
 
