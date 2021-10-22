@@ -1,14 +1,16 @@
 // somebar - dwl bar
 // See LICENSE file for copyright and license details.
 
+#include <fcntl.h>
 #include <math.h>
+#include <signal.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <QGuiApplication>
 #include <QSocketNotifier>
 #include <wayland-client.h>
-#include "qnamespace.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "common.hpp"
@@ -17,12 +19,19 @@
 static void waylandFlush();
 static void waylandWriteReady();
 static void requireGlobal(const void *p, const char *name);
+static void setupStatusFifo();
+static void onStatus();
+static void cleanup();
 
 wl_display *display;
 wl_compositor *compositor;
 wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
+static std::string statusFifoName;
+static int statusFifoFd {-1};
+static int statusFifoWriter {-1};
 static QSocketNotifier *displayWriteNotifier;
+static sig_atomic_t quitting {0};
 
 static xdg_wm_base *xdgWmBase;
 static const struct xdg_wm_base_listener xdgWmBaseListener = {
@@ -37,7 +46,50 @@ static void onReady()
     requireGlobal(compositor, "wl_compositor");
     requireGlobal(shm, "wl_shm");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
+    setupStatusFifo();
     std::ignore = new Bar(nullptr);
+}
+
+static void setupStatusFifo()
+{
+    for (auto i=0; i<100; i++) {
+        auto path = std::string{getenv("XDG_RUNTIME_DIR")} + "/somebar-" + std::to_string(i);
+        auto result = mkfifo(path.c_str(), 0666);
+        if (result == 0) {
+            auto fd = open(path.c_str(), O_CLOEXEC | O_NONBLOCK | O_RDONLY);
+            if (fd == -1) {
+                perror("open status fifo reader");
+                cleanup();
+                exit(1);
+            }
+            statusFifoName = path;
+            statusFifoFd = fd;
+
+            fd = open(path.c_str(), O_CLOEXEC | O_WRONLY);
+            if (fd == -1) {
+                perror("open status fifo writer");
+                cleanup();
+                exit(1);
+            }
+            statusFifoWriter = fd;
+
+            auto statusNotifier = new QSocketNotifier(statusFifoFd, QSocketNotifier::Read);
+            statusNotifier->setEnabled(true);
+            QObject::connect(statusNotifier, &QSocketNotifier::activated, onStatus);
+            return;
+        } else if (errno != EEXIST) {
+            perror("mkfifo");
+        }
+    }
+}
+
+static void onStatus()
+{
+    char buffer[512];
+    auto n = read(statusFifoFd, buffer, sizeof(buffer));
+    printf("read %d status bytes\n", n);
+    auto str = QString::fromUtf8(buffer, n);
+    printf("got status: %s\n", qPrintable(str));
 }
 
 struct HandleGlobalHelper {
@@ -73,6 +125,12 @@ int main(int argc, char **argv)
     QCoreApplication::setOrganizationDomain("tapesoftware.net");
     QCoreApplication::setApplicationName("somebar");
 
+    struct sigaction exitSignal;
+    memset(&exitSignal, 0, sizeof(exitSignal));
+    exitSignal.sa_handler = [](int) {quitting = true;};
+    sigaction(SIGINT, &exitSignal, nullptr);
+    sigaction(SIGTERM, &exitSignal, nullptr);
+
     display = wl_display_connect(NULL);
     if (!display) {
         fprintf(stderr, "Failed to connect to Wayland display\n");
@@ -81,15 +139,8 @@ int main(int argc, char **argv)
 
     auto registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, nullptr);
-
-    auto initialSync = wl_display_sync(display);
-    auto initialSyncListener = wl_callback_listener {
-        [](void*, wl_callback *cb, uint32_t) {
-            onReady();
-            wl_callback_destroy(cb);
-        }
-    };
-    wl_callback_add_listener(initialSync, &initialSyncListener, nullptr);
+    wl_display_roundtrip(display);
+    onReady();
 
     QSocketNotifier displayReadNotifier(wl_display_get_fd(display), QSocketNotifier::Read);
     displayReadNotifier.setEnabled(true);
@@ -98,9 +149,16 @@ int main(int argc, char **argv)
     displayWriteNotifier->setEnabled(false);
     QObject::connect(displayWriteNotifier, &QSocketNotifier::activated, waylandWriteReady);
 
-    while (true) {
+    while (!quitting) {
         waylandFlush();
         app.processEvents(QEventLoop::WaitForMoreEvents);
+    }
+    cleanup();
+}
+
+void cleanup() {
+    if (!statusFifoName.empty()) {
+        unlink(statusFifoName.c_str());
     }
 }
 
@@ -120,5 +178,6 @@ static void requireGlobal(const void *p, const char *name)
 {
     if (p) return;
     fprintf(stderr, "Wayland compositor does not export required global %s, aborting.\n", name);
+    cleanup();
     exit(1);
 }
