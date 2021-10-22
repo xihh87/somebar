@@ -3,7 +3,7 @@ project('somebar', ['c', 'cpp'],
 
 wayland_dep = dependency('wayland-client')
 qt5 = import('qt5')
-qt5_dep = dependency('qt5', modules: ['Core', 'Widgets'])
+qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
 #moc = qt5.compile_moc(headers: [ 'src/.hpp', ])
 
 subdir('protocols')
@@ -12,7 +12,6 @@ executable('somebar',
   'src/main.cpp',
   'src/shm_buffer.cpp',
   'src/bar.cpp',
-  'src/bar_widget.cpp',
   wayland_sources,
   #moc,
   dependencies: [qt5_dep, wayland_dep])

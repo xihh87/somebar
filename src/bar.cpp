@@ -1,7 +1,9 @@
 // somebar - dwl bar
 // See LICENSE file for copyright and license details.
 
+#include <QColor>
 #include <QImage>
+#include <QPainter>
 #include "bar.hpp"
 #include "config.hpp"
 
@@ -24,6 +26,10 @@ Bar::Bar(const wl_output *output)
     zwlr_layer_surface_v1_set_size(_layerSurface, 0, barSize);
     zwlr_layer_surface_v1_set_exclusive_zone(_layerSurface, barSize);
     wl_surface_commit(_surface);
+
+    for (auto i=1; i<=4; i++) {
+        _tags.push_back({ QString::number(i), i%2 == 0 });
+    }
 }
 
 Bar::~Bar()
@@ -36,10 +42,11 @@ void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height
 {
     zwlr_layer_surface_v1_ack_configure(_layerSurface, serial);
     _bufs.emplace(width, height, WL_SHM_FORMAT_XRGB8888);
-    auto root = _widget.root();
-    root->setFixedSize(width, height);
     render();
 }
+static QBrush inactiveBg = {QColor::fromRgb(0, 0, 0)};
+static QBrush activeBg = QBrush {QColor::fromRgb(0, 0, 255)};
+static QPen fg = QPen {QBrush {QColor::fromRgb(255, 255, 255)}, 1};
 
 void Bar::render()
 {
@@ -48,11 +55,38 @@ void Bar::render()
         _bufs->width,
         _bufs->height,
         _bufs->stride,
-        QImage::Format_RGBX8888
+        QImage::Format_ARGB32
     };
-    auto root = _widget.root();
-    root->render(&img);
+    auto painter = QPainter {&img};
+    auto font = painter.font();
+    font.setBold(true);
+    font.setPixelSize(18);
+    painter.setFont(font);
+    painter.setPen(fg);
+
+    painter.fillRect(0, 0, img.width(), img.height(), activeBg);
+    _fontMetrics.emplace(painter.font());
+    _textY = _fontMetrics->ascent() + paddingY;
+    renderTags(painter);
+    
     wl_surface_attach(_surface, _bufs->buffer(), 0, 0);
     wl_surface_commit(_surface);
     _bufs->flip();
+}
+
+void Bar::renderTags(QPainter &painter)
+{
+    auto x = 0;
+    for (const auto &tag : _tags) {
+        auto size = textWidth(tag.name) + paddingX*2;
+        auto& bg = tag.active ? activeBg : inactiveBg;
+        painter.fillRect(x, 0, size, barSize, bg);
+        painter.drawText(paddingX+x, _textY, tag.name);
+        x += size;
+    }
+}
+
+int Bar::textWidth(const QString &text)
+{
+    return _fontMetrics->size(Qt::TextSingleLine, text).width();
 }

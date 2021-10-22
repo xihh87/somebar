@@ -5,7 +5,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <QApplication>
+#include <QGuiApplication>
 #include <QSocketNotifier>
 #include <wayland-client.h>
 #include "qnamespace.h"
@@ -68,7 +68,7 @@ static const struct wl_registry_listener registry_listener = { registryHandleGlo
 
 int main(int argc, char **argv)
 {
-    QApplication app(argc, argv);
+    QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("tape software");
     QCoreApplication::setOrganizationDomain("tapesoftware.net");
     QCoreApplication::setApplicationName("somebar");
