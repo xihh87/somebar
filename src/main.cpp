@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <linux/input-event-codes.h>
 #include <optional>
 #include <QGuiApplication>
 #include <QSocketNotifier>
@@ -43,11 +44,62 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
     }
 };
 
+struct PointerState {
+    wl_pointer *pointer;
+    Bar *focusedBar;
+    int x, y;
+    bool leftButtonClick;
+};
+static PointerState pointerState;
+static const struct wl_pointer_listener pointerListener = {
+    .enter = [](void*, wl_pointer*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y)
+    {
+        pointerState.focusedBar = &bar.value();
+    },
+    .leave = [](void*, wl_pointer*, uint32_t serial, wl_surface*) {
+        pointerState.focusedBar = nullptr;
+    },
+    .motion = [](void*, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
+        pointerState.x = wl_fixed_to_int(x);
+        pointerState.y = wl_fixed_to_int(y);
+    },
+    .button = [](void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t pressed) {
+        if (button == BTN_LEFT) {
+            pointerState.leftButtonClick = pressed == WL_POINTER_BUTTON_STATE_PRESSED;
+        }
+    },
+    .axis = [](void*, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { },
+    .frame = [](void*, wl_pointer*) {
+        if (!pointerState.focusedBar) return;
+        if (pointerState.leftButtonClick) {
+            pointerState.leftButtonClick = false;
+            pointerState.focusedBar->click(pointerState.x, pointerState.y);
+        }
+    },
+    .axis_source = [](void*, wl_pointer*, uint32_t) { },
+    .axis_stop = [](void*, wl_pointer*, uint32_t, uint32_t) { },
+    .axis_discrete = [](void*, wl_pointer*, uint32_t, int32_t) { },
+};
+
+static wl_seat *seat;
+static const struct wl_seat_listener seatListener = {
+    [](void*, wl_seat*, uint32_t cap)
+    {
+        if (cap & WL_SEAT_CAPABILITY_POINTER) {
+            printf("got pointer");
+            pointerState.pointer = wl_seat_get_pointer(seat);
+            wl_pointer_add_listener(pointerState.pointer, &pointerListener, nullptr);
+        }
+    },
+    [](void*, wl_seat*, const char *name) { }
+};
+
 // called after we have received the initial batch of globals
 static void onReady()
 {
     requireGlobal(compositor, "wl_compositor");
     requireGlobal(shm, "wl_shm");
+    requireGlobal(seat, "wl_seat");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
     setupStatusFifo();
     bar.emplace(nullptr);
@@ -118,6 +170,9 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
     if (reg.handle(xdgWmBase, xdg_wm_base_interface, 2)) {
         xdg_wm_base_add_listener(xdgWmBase, &xdgWmBaseListener, nullptr);
         return;
+    }
+    if (seat == nullptr && reg.handle(seat, wl_seat_interface, 7)) {
+        wl_seat_add_listener(seat, &seatListener, nullptr);
     }
 }
 static const struct wl_registry_listener registry_listener = { registryHandleGlobal, nullptr };

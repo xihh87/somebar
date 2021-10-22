@@ -15,6 +15,7 @@
 struct Tag {
     QString name;
     bool active;
+    int x;
 };
 
 class Bar {
@@ -45,5 +46,6 @@ class Bar {
 public:
     explicit Bar(const wl_output *output);
     void setStatus(const QString &status);
+    void click(int x, int y);
     ~Bar();
 };

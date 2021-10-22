@@ -60,6 +60,17 @@ Bar::~Bar()
     zwlr_layer_surface_v1_destroy(_layerSurface);
 }
 
+void Bar::click(int x, int)
+{
+    for (auto tag=_tags.rbegin(); tag != _tags.rend(); tag++) {
+        if (x > tag->x) {
+            tag->active = !tag->active;
+            invalidate();
+            return;
+        }
+    }
+}
+
 void Bar::invalidate()
 {
     if (_invalid) return;
@@ -119,7 +130,8 @@ void Bar::setColorScheme(const ColorScheme &scheme)
 
 void Bar::renderTags()
 {
-    for (const auto &tag : _tags) {
+    for (auto &tag : _tags) {
+        tag.x = _x;
         setColorScheme(tag.active ? colorActive : colorInactive);
         renderText(tag.name);
     }
