@@ -14,6 +14,7 @@
 #include <QGuiApplication>
 #include <QSocketNotifier>
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "common.hpp"
@@ -46,15 +47,20 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
 
 struct PointerState {
     wl_pointer *pointer;
+    wl_surface *cursorSurface;
+    wl_cursor_image *cursorImage;
     Bar *focusedBar;
     int x, y;
     bool leftButtonClick;
 };
 static PointerState pointerState;
 static const struct wl_pointer_listener pointerListener = {
-    .enter = [](void*, wl_pointer*, uint32_t serial, wl_surface*, wl_fixed_t x, wl_fixed_t y)
+    .enter = [](void*, wl_pointer *pointer, uint32_t serial,
+                wl_surface*, wl_fixed_t x, wl_fixed_t y)
     {
         pointerState.focusedBar = &bar.value();
+        wl_pointer_set_cursor(pointer, serial, pointerState.cursorSurface,
+            pointerState.cursorImage->hotspot_x, pointerState.cursorImage->hotspot_y);
     },
     .leave = [](void*, wl_pointer*, uint32_t serial, wl_surface*) {
         pointerState.focusedBar = nullptr;
@@ -85,8 +91,14 @@ static wl_seat *seat;
 static const struct wl_seat_listener seatListener = {
     [](void*, wl_seat*, uint32_t cap)
     {
-        if (cap & WL_SEAT_CAPABILITY_POINTER) {
-            printf("got pointer");
+        if (!pointerState.pointer && WL_SEAT_CAPABILITY_POINTER) {
+            auto cursorTheme = wl_cursor_theme_load(NULL, 24, shm);
+            auto cursorImage = wl_cursor_theme_get_cursor(cursorTheme, "left_ptr")->images[0];
+            pointerState.cursorImage = cursorImage;
+            pointerState.cursorSurface = wl_compositor_create_surface(compositor);
+            wl_surface_attach(pointerState.cursorSurface,
+                wl_cursor_image_get_buffer(cursorImage), 0, 0);
+            wl_surface_commit(pointerState.cursorSurface);
             pointerState.pointer = wl_seat_get_pointer(seat);
             wl_pointer_add_listener(pointerState.pointer, &pointerListener, nullptr);
         }
