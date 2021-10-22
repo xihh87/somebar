@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <optional>
 #include <QGuiApplication>
 #include <QSocketNotifier>
 #include <wayland-client.h>
@@ -28,6 +29,7 @@ wl_display *display;
 wl_compositor *compositor;
 wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
+static std::optional<Bar> bar;
 static std::string statusFifoName;
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
@@ -48,7 +50,7 @@ static void onReady()
     requireGlobal(shm, "wl_shm");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
     setupStatusFifo();
-    std::ignore = new Bar(nullptr);
+    bar.emplace(nullptr);
 }
 
 static void setupStatusFifo()
@@ -89,6 +91,9 @@ static void onStatus()
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
     auto str = QString::fromUtf8(buffer, n);
+    if (bar) {
+        bar->setStatus(str);
+    }
 }
 
 struct HandleGlobalHelper {

@@ -13,6 +13,13 @@ const zwlr_layer_surface_v1_listener Bar::_layerSurfaceListener = {
         static_cast<Bar*>(owner)->layerSurfaceConfigure(serial, width, height);
     }
 };
+const wl_callback_listener Bar::_frameListener = {
+    [](void *owner, wl_callback *cb, uint32_t)
+    {
+        static_cast<Bar*>(owner)->render();
+        wl_callback_destroy(cb);
+    }
+};
 
 static QFont getFont()
 {
@@ -53,6 +60,21 @@ Bar::~Bar()
     zwlr_layer_surface_v1_destroy(_layerSurface);
 }
 
+void Bar::invalidate()
+{
+    if (_invalid) return;
+    _invalid = true;
+    auto frame = wl_surface_frame(_surface);
+    wl_callback_add_listener(frame, &_frameListener, this);
+    wl_surface_commit(_surface);
+}
+
+void Bar::setStatus(const QString &status)
+{
+    _status = status;
+    invalidate();
+}
+
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
 {
     zwlr_layer_surface_v1_ack_configure(_layerSurface, serial);
@@ -83,8 +105,10 @@ void Bar::render()
     
     _painter = nullptr;
     wl_surface_attach(_surface, _bufs->buffer(), 0, 0);
+    wl_surface_damage(_surface, 0, 0, INT_MAX, INT_MAX);
     wl_surface_commit(_surface);
     _bufs->flip();
+    _invalid = false;
 }
 
 void Bar::setColorScheme(const ColorScheme &scheme)
