@@ -23,7 +23,8 @@ class Bar {
     wl_surface *_surface {nullptr};
     zwlr_layer_surface_v1 *_layerSurface {nullptr};
     QPainter *_painter {nullptr};
-    std::optional<QFontMetrics> _fontMetrics;
+    QFont _font;
+    QFontMetrics _fontMetrics;
     std::optional<ShmBuffer> _bufs;
     std::vector<Tag> _tags;
     int _textY;

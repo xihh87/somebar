@@ -14,7 +14,16 @@ const zwlr_layer_surface_v1_listener Bar::_layerSurfaceListener = {
     }
 };
 
+static QFont getFont()
+{
+    QFont font {fontFamily, fontSizePt};
+    font.setBold(fontBold);
+    return font;
+}
+
 Bar::Bar(const wl_output *output)
+    : _font {getFont()}
+    , _fontMetrics {_font}
 {
     _surface = wl_compositor_create_surface(compositor);
     _layerSurface = zwlr_layer_shell_v1_get_layer_surface(wlrLayerShell,
@@ -23,6 +32,10 @@ Bar::Bar(const wl_output *output)
     auto anchor = topbar ? ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP : ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
     zwlr_layer_surface_v1_set_anchor(_layerSurface,
         anchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+
+    auto barSize = _fontMetrics.ascent() + _fontMetrics.descent() + paddingY * 2;
+    _textY = _fontMetrics.ascent() + paddingY;
+
     zwlr_layer_surface_v1_set_size(_layerSurface, 0, barSize);
     zwlr_layer_surface_v1_set_exclusive_zone(_layerSurface, barSize);
     wl_surface_commit(_surface);
@@ -56,15 +69,10 @@ void Bar::render()
     };
     auto painter = QPainter {&img};
     _painter = &painter;
-    auto font = painter.font();
-    font.setBold(true);
-    font.setPixelSize(18);
-    painter.setFont(font);
+    painter.setFont(_font);
 
     setColorScheme(colorActive);
     painter.fillRect(0, 0, img.width(), img.height(), painter.brush());
-    _fontMetrics.emplace(painter.font());
-    _textY = _fontMetrics->ascent() + paddingY;
     renderTags(painter);
     
     _painter = nullptr;
@@ -85,7 +93,7 @@ void Bar::renderTags(QPainter &painter)
     for (const auto &tag : _tags) {
         auto size = textWidth(tag.name) + paddingX*2;
         setColorScheme(tag.active ? colorActive : colorInactive);
-        painter.fillRect(x, 0, size, barSize, _painter->brush());
+        painter.fillRect(x, 0, size, _bufs->height, _painter->brush());
         painter.drawText(paddingX+x, _textY, tag.name);
         x += size;
     }
@@ -93,5 +101,5 @@ void Bar::renderTags(QPainter &painter)
 
 int Bar::textWidth(const QString &text)
 {
-    return _fontMetrics->size(Qt::TextSingleLine, text).width();
+    return _fontMetrics.size(Qt::TextSingleLine, text).width();
 }
