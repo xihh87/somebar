@@ -43,6 +43,8 @@ Bar::Bar(const wl_output *output)
     for (auto i=1; i<=4; i++) {
         _tags.push_back({ QString::number(i), i%2 == 0 });
     }
+    _windowTitle = "Window title";
+    _status = "Status";
 }
 
 Bar::~Bar()
@@ -69,11 +71,15 @@ void Bar::render()
     };
     auto painter = QPainter {&img};
     _painter = &painter;
+    _x = 0;
     painter.setFont(_font);
 
     setColorScheme(colorActive);
     painter.fillRect(0, 0, img.width(), img.height(), painter.brush());
-    renderTags(painter);
+    renderTags();
+    setColorScheme(colorActive);
+    renderText(_windowTitle);
+    renderStatus();
     
     _painter = nullptr;
     wl_surface_attach(_surface, _bufs->buffer(), 0, 0);
@@ -87,16 +93,29 @@ void Bar::setColorScheme(const ColorScheme &scheme)
     _painter->setPen(QPen {QBrush {scheme.fg}, 1});
 }
 
-void Bar::renderTags(QPainter &painter)
+void Bar::renderTags()
 {
-    auto x = 0;
     for (const auto &tag : _tags) {
-        auto size = textWidth(tag.name) + paddingX*2;
         setColorScheme(tag.active ? colorActive : colorInactive);
-        painter.fillRect(x, 0, size, _bufs->height, _painter->brush());
-        painter.drawText(paddingX+x, _textY, tag.name);
-        x += size;
+        renderText(tag.name);
     }
+}
+
+void Bar::renderText(const QString &text)
+{
+    auto size = textWidth(text) + paddingX*2;
+    _painter->fillRect(_x, 0, size, _bufs->height, _painter->brush());
+    _painter->drawText(paddingX+_x, _textY, text);
+    _x += size;
+}
+
+void Bar::renderStatus()
+{
+    auto size = textWidth(_status) + paddingX*2;
+    _x = _bufs->width - size;
+    _painter->fillRect(_x, 0, size, _bufs->height, _painter->brush());
+    _painter->drawText(paddingX+_x, _textY, _status);
+    _x = _bufs->width;
 }
 
 int Bar::textWidth(const QString &text)

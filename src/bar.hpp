@@ -26,12 +26,17 @@ class Bar {
     QFont _font;
     QFontMetrics _fontMetrics;
     std::optional<ShmBuffer> _bufs;
+    int _textY, _x;
+
     std::vector<Tag> _tags;
-    int _textY;
+    QString _windowTitle;
+    QString _status;
 
     void layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height);
     void render();
-    void renderTags(QPainter &painter);
+    void renderTags();
+    void renderStatus();
+    void renderText(const QString &text);
     int textWidth(const QString &text);
     void setColorScheme(const ColorScheme &scheme);
 public:
