@@ -7,6 +7,7 @@
 #include <wayland-client.h>
 #include <QString>
 #include <QFontMetrics>
+#include <QPainter>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "common.hpp"
 #include "shm_buffer.hpp"
@@ -21,6 +22,7 @@ class Bar {
 
     wl_surface *_surface {nullptr};
     zwlr_layer_surface_v1 *_layerSurface {nullptr};
+    QPainter *_painter {nullptr};
     std::optional<QFontMetrics> _fontMetrics;
     std::optional<ShmBuffer> _bufs;
     std::vector<Tag> _tags;
@@ -30,6 +32,7 @@ class Bar {
     void render();
     void renderTags(QPainter &painter);
     int textWidth(const QString &text);
+    void setColorScheme(const ColorScheme &scheme);
 public:
     explicit Bar(const wl_output *output);
     ~Bar();
