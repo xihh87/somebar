@@ -5,6 +5,7 @@
 #include <math.h>
 #include <signal.h>
 #include <sys/mman.h>
+#include <sys/signalfd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -31,7 +32,7 @@ static std::string statusFifoName;
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
 static QSocketNotifier *displayWriteNotifier;
-static sig_atomic_t quitting {0};
+static bool quitting {false};
 
 static xdg_wm_base *xdgWmBase;
 static const struct xdg_wm_base_listener xdgWmBaseListener = {
@@ -87,9 +88,7 @@ static void onStatus()
 {
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
-    printf("read %d status bytes\n", n);
     auto str = QString::fromUtf8(buffer, n);
-    printf("got status: %s\n", qPrintable(str));
 }
 
 struct HandleGlobalHelper {
@@ -120,16 +119,25 @@ static const struct wl_registry_listener registry_listener = { registryHandleGlo
 
 int main(int argc, char **argv)
 {
+    static sigset_t blockedsigs;
+    sigemptyset(&blockedsigs);
+    sigaddset(&blockedsigs, SIGINT);
+    sigaddset(&blockedsigs, SIGTERM);
+    sigprocmask(SIG_BLOCK, &blockedsigs, nullptr);
+
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("tape software");
     QCoreApplication::setOrganizationDomain("tapesoftware.net");
     QCoreApplication::setApplicationName("somebar");
 
-    struct sigaction exitSignal;
-    memset(&exitSignal, 0, sizeof(exitSignal));
-    exitSignal.sa_handler = [](int) {quitting = true;};
-    sigaction(SIGINT, &exitSignal, nullptr);
-    sigaction(SIGTERM, &exitSignal, nullptr);
+    int sfd = signalfd(-1, &blockedsigs, SFD_CLOEXEC | SFD_NONBLOCK);
+    if (sfd < 0) {
+        perror("signalfd");
+        cleanup();
+        exit(1);
+    }
+    QSocketNotifier signalNotifier {sfd, QSocketNotifier::Read};
+    QObject::connect(&signalNotifier, &QSocketNotifier::activated, []() { quitting = true; });
 
     display = wl_display_connect(NULL);
     if (!display) {
