@@ -30,7 +30,6 @@ Bar::~Bar()
 {
     wl_surface_destroy(_surface);
     zwlr_layer_surface_v1_destroy(_layerSurface);
-    waylandFlush();
 }
 
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
@@ -56,5 +55,4 @@ void Bar::render()
     wl_surface_attach(_surface, _bufs->buffer(), 0, 0);
     wl_surface_commit(_surface);
     _bufs->flip();
-    waylandFlush();
 }

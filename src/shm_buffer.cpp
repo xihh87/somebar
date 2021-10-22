@@ -34,7 +34,6 @@ ShmBuffer::~ShmBuffer()
     for (auto i=0; i<n; i++) {
         wl_buffer_destroy(_buffers[i].buffer);
     }
-    waylandFlush();
 }
 
 uint8_t* ShmBuffer::data() const { return _buffers[_current].data; }

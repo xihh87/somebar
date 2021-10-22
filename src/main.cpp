@@ -14,6 +14,7 @@
 #include "common.hpp"
 #include "bar.hpp"
 
+static void waylandFlush();
 static void waylandWriteReady();
 static void requireGlobal(const void *p, const char *name);
 
@@ -27,7 +28,6 @@ static xdg_wm_base *xdgWmBase;
 static const struct xdg_wm_base_listener xdgWmBaseListener = {
     [](void*, xdg_wm_base *sender, uint32_t serial) {
         xdg_wm_base_pong(sender, serial);
-        waylandFlush();
     }
 };
 
@@ -38,7 +38,6 @@ static void onReady()
     requireGlobal(shm, "wl_shm");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
     std::ignore = new Bar(nullptr);
-    waylandFlush();
 }
 
 struct HandleGlobalHelper {
@@ -98,9 +97,11 @@ int main(int argc, char **argv)
     displayWriteNotifier = new QSocketNotifier(wl_display_get_fd(display), QSocketNotifier::Write);
     displayWriteNotifier->setEnabled(false);
     QObject::connect(displayWriteNotifier, &QSocketNotifier::activated, waylandWriteReady);
-    waylandFlush();
 
-    return app.exec();
+    while (true) {
+        waylandFlush();
+        app.processEvents(QEventLoop::WaitForMoreEvents);
+    }
 }
 
 void waylandFlush()

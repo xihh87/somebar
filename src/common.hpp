@@ -5,8 +5,6 @@
 #include <wayland-client.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
-void waylandFlush();
-
 extern wl_display *display;
 extern wl_compositor *compositor;
 extern wl_shm *shm;
