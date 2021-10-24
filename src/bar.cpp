@@ -47,8 +47,8 @@ Bar::Bar(const wl_output *output)
     zwlr_layer_surface_v1_set_exclusive_zone(_layerSurface, barSize);
     wl_surface_commit(_surface);
 
-    for (auto i=1; i<=4; i++) {
-        _tags.push_back({ QString::number(i), i%2 == 0 });
+    for (auto tag : tagNames) {
+        _tags.push_back({ tag, false });
     }
     _windowTitle = "Window title";
     _status = "Status";

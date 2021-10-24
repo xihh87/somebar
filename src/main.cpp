@@ -17,6 +17,7 @@
 #include <wayland-cursor.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
+#include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
 #include "common.hpp"
 #include "bar.hpp"
 
@@ -31,6 +32,8 @@ wl_display *display;
 wl_compositor *compositor;
 wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
+znet_tapesoftware_dwl_wm_v1 *dwlWm;
+std::vector<QString> tagNames;
 static std::optional<Bar> bar;
 static std::string statusFifoName;
 static int statusFifoFd {-1};
@@ -104,6 +107,12 @@ static const struct wl_seat_listener seatListener = {
         }
     },
     [](void*, wl_seat*, const char *name) { }
+};
+
+static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
+    .tag = [](void*, znet_tapesoftware_dwl_wm_v1*, const char *name) {
+        tagNames.push_back(name);
+    },
 };
 
 // called after we have received the initial batch of globals
@@ -185,6 +194,10 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
     }
     if (seat == nullptr && reg.handle(seat, wl_seat_interface, 7)) {
         wl_seat_add_listener(seat, &seatListener, nullptr);
+    }
+    if (reg.handle(dwlWm, znet_tapesoftware_dwl_wm_v1_interface, 1)) {
+        znet_tapesoftware_dwl_wm_v1_add_listener(dwlWm, &dwlWmListener, nullptr);
+        wl_display_roundtrip(display);
     }
 }
 static const struct wl_registry_listener registry_listener = { registryHandleGlobal, nullptr };
