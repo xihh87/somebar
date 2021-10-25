@@ -15,6 +15,7 @@ extern wl_compositor *compositor;
 extern wl_shm *shm;
 extern zwlr_layer_shell_v1 *wlrLayerShell;
 extern std::vector<QString> tagNames;
+extern std::vector<QString> layoutNames;
 
 struct ColorScheme {
     QColor fg, bg;

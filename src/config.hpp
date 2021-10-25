@@ -11,8 +11,8 @@ constexpr int paddingY = 3;
 
 constexpr const char *fontFamily = "Source Sans Pro";
 constexpr int fontSizePt = 12;
-constexpr bool fontBold = true;
+constexpr bool fontBold = false;
 
-constexpr ColorScheme colorInactive = {QColor(255, 255, 255), QColor(0, 0, 0)};
-constexpr ColorScheme colorActive = {QColor(255, 255, 255), QColor(0, 0, 255)};
+constexpr ColorScheme colorInactive = {QColor(0xbb, 0xbb, 0xbb), QColor(0x22, 0x22, 0x22)};
+constexpr ColorScheme colorActive = {QColor(0xee, 0xee, 0xee), QColor(0x00, 0x55, 0x77)};
 constexpr ColorScheme colorUrgent = {colorActive.bg, colorActive.fg};

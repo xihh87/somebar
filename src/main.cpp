@@ -43,6 +43,7 @@ wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
 znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<QString> tagNames;
+std::vector<QString> layoutNames;
 static bool ready;
 static std::vector<Monitor> monitors;
 static QString lastStatus;
@@ -131,12 +132,27 @@ static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
     .tag = [](void*, znet_tapesoftware_dwl_wm_v1*, const char *name) {
         tagNames.push_back(name);
     },
+    .layout = [](void*, znet_tapesoftware_dwl_wm_v1*, const char *name) {
+        layoutNames.push_back(name);
+    },
 };
 
 static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorListener {
+    .selected = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t selected) {
+        auto mon = static_cast<Monitor*>(mv);
+        mon->bar->setSelected(selected);
+    },
     .tag = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t tag, uint32_t state, int32_t numClients, int32_t focusedClient) {
         auto mon = static_cast<Monitor*>(mv);
         mon->bar->setTag(tag, static_cast<znet_tapesoftware_dwl_wm_monitor_v1_tag_state>(state), numClients, focusedClient);
+    },
+    .layout = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t layout) {
+        auto mon = static_cast<Monitor*>(mv);
+        mon->bar->setLayout(layout);
+    },
+    .title = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, const char *title) {
+        auto mon = static_cast<Monitor*>(mv);
+        mon->bar->setTitle(title);
     },
     .frame = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*) {
         auto mon = static_cast<Monitor*>(mv);

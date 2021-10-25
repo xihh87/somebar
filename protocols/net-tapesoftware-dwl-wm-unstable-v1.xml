@@ -49,6 +49,12 @@
             </description>
             <arg name="name" type="string"/>
         </event>
+
+        <event name="layout">
+            <description summary="announces the presence of a layout">
+            </description>
+            <arg name="name" type="string"/>
+        </event>
     </interface>
 
     <interface name="znet_tapesoftware_dwl_wm_monitor_v1" version="1">
@@ -66,13 +72,31 @@
             </description>
         </request>
 
+        <event name="selected">
+            <description summary="updates the selected state of the monitor">
+            </description>
+            <arg name="selected" type="int"/>
+        </event>
+
         <event name="tag">
-            <description summary="sent every time a tag state gets updated">
+            <description summary="updates the state of one tag">
             </description>
             <arg name="tag" type="int"/>
             <arg name="state" type="uint" enum="tag_state"/>
             <arg name="num_clients" type="int"/>
             <arg name="focused_client" type="int" summary="-1 if there is no focused client"/>
+        </event>
+
+        <event name="layout">
+            <description summary="updates the selected layout">
+            </description>
+            <arg name="layout" type="int"/>
+        </event>
+
+        <event name="title">
+            <description summary="updates the focused client">
+            </description>
+            <arg name="title" type="string"/>
         </event>
 
         <event name="frame">

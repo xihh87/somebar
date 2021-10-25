@@ -55,9 +55,6 @@ void Bar::create(wl_output *output)
     zwlr_layer_surface_v1_set_size(_layerSurface.get(), 0, barSize);
     zwlr_layer_surface_v1_set_exclusive_zone(_layerSurface.get(), barSize);
     wl_surface_commit(_surface.get());
-
-    _windowTitle = "Window title";
-    _status = "Status";
 }
 
 void Bar::click(int x, int)
@@ -87,10 +84,10 @@ void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, i
     t.focusedClient = focusedClient;
 }
 
-void Bar::setStatus(const QString &status)
-{
-    _status = status;
-}
+void Bar::setSelected(bool selected) { _selected = selected; }
+void Bar::setLayout(int layout) { _layout = layout; }
+void Bar::setTitle(const char *title) { _title = title; }
+void Bar::setStatus(const QString &status) { _status = status; }
 
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
 {
@@ -114,8 +111,9 @@ void Bar::render()
     painter.setFont(font);
 
     renderTags();
-    setColorScheme(colorActive);
-    renderText(_windowTitle);
+    setColorScheme(_selected ? colorActive : colorInactive);
+    renderText(layoutNames[_layout]);
+    renderText(_title);
     renderStatus();
     
     _painter = nullptr;
@@ -161,7 +159,7 @@ void Bar::renderText(const QString &text)
 void Bar::renderStatus()
 {
     _painter->fillRect(_x, 0, _bufs->width-_x, _bufs->height, _painter->brush());
-    auto size = textWidth(_status) + paddingX*2;
+    auto size = textWidth(_status) + paddingX;
     _x = _bufs->width - size;
     _painter->drawText(paddingX+_x, _textY, _status);
     _x = _bufs->width;

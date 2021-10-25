@@ -32,7 +32,9 @@ class Bar {
     bool _invalid {false};
 
     std::vector<Tag> _tags;
-    QString _windowTitle;
+    int _layout;
+    bool _selected;
+    QString _title;
     QString _status;
 
     void layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height);
@@ -46,7 +48,10 @@ public:
     Bar();
     const wl_surface* surface() const;
     void create(wl_output *output);
+    void setSelected(bool selected);
     void setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient);
+    void setLayout(int layout);
+    void setTitle(const char *title);
     void setStatus(const QString &status);
     void invalidate();
     void click(int x, int y);
