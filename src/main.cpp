@@ -1,6 +1,7 @@
 // somebar - dwl bar
 // See LICENSE file for copyright and license details.
 
+#include <cstdio>
 #include <fcntl.h>
 #include <math.h>
 #include <signal.h>
@@ -21,6 +22,13 @@
 #include "common.hpp"
 #include "bar.hpp"
 
+struct Monitor {
+    uint32_t name;
+    wl_output *wlOutput;
+    znet_tapesoftware_dwl_wm_monitor_v1 *dwlMonitor;
+    std::optional<Bar> bar;
+};
+
 static void waylandFlush();
 static void waylandWriteReady();
 static void requireGlobal(const void *p, const char *name);
@@ -34,6 +42,7 @@ wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
 znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<QString> tagNames;
+static std::vector<Monitor> monitors;
 static std::optional<Bar> bar;
 static std::string statusFifoName;
 static int statusFifoFd {-1};
@@ -115,6 +124,25 @@ static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
     },
 };
 
+static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorListener {
+    .tag = [](void*, znet_tapesoftware_dwl_wm_monitor_v1*, int tag, int active, int numClients) {
+        printf("tag %s: active=%d, num_clients=%d\n", qPrintable(tagNames[tag]), active, numClients);
+    }
+};
+
+static void setupOutput(Monitor &monitor) {
+    monitor.dwlMonitor = znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput);
+    znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor, &dwlWmMonitorListener, &monitor);
+    monitor.bar.emplace(monitor.wlOutput);
+}
+
+static void onOutput(int name, wl_output *output) {
+    auto& monitor = monitors.emplace_back(name, output);
+    if (dwlWm) {
+        setupOutput(monitor);
+    }
+}
+
 // called after we have received the initial batch of globals
 static void onReady()
 {
@@ -122,8 +150,14 @@ static void onReady()
     requireGlobal(shm, "wl_shm");
     requireGlobal(seat, "wl_seat");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
+    requireGlobal(dwlWm, "znet_tapesoftware_dwl_wm_v1");
     setupStatusFifo();
-    bar.emplace(nullptr);
+    wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
+    for (auto& monitor : monitors) {
+        auto monitor = znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, output);
+        printf("created monitor %p for output %p\n", monitor, output);
+        bar.emplace(output);
+    }
 }
 
 static void setupStatusFifo()
@@ -195,9 +229,11 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
     if (seat == nullptr && reg.handle(seat, wl_seat_interface, 7)) {
         wl_seat_add_listener(seat, &seatListener, nullptr);
     }
+    if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
+        outputs.push_back(output);
+    }
     if (reg.handle(dwlWm, znet_tapesoftware_dwl_wm_v1_interface, 1)) {
         znet_tapesoftware_dwl_wm_v1_add_listener(dwlWm, &dwlWmListener, nullptr);
-        wl_display_roundtrip(display);
     }
 }
 static const struct wl_registry_listener registry_listener = { registryHandleGlobal, nullptr };

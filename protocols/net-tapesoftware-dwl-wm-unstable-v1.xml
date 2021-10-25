@@ -37,10 +37,35 @@
             </description>
         </request>
 
+        <request name="get_monitor">
+            <description summary="gets a dwl monitor from an output">
+            </description>
+            <arg name="id" type="new_id" interface="znet_tapesoftware_dwl_wm_monitor_v1" />
+            <arg name="output" type="object" interface="wl_output" />
+        </request>
+
         <event name="tag">
             <description summary="announces the presence of a tag">
             </description>
             <arg name="name" type="string"/>
+        </event>
+    </interface>
+
+    <interface name="znet_tapesoftware_dwl_wm_monitor_v1" version="1">
+        <description summary="control one monitor">
+        </description>
+
+        <request name="release" type="destructor">
+            <description summary="release dwl_monitor">
+            </description>
+        </request>
+
+        <event name="tag">
+            <description summary="sent every time a tag state gets updated">
+            </description>
+            <arg name="tag" type="int"/>
+            <arg name="active" type="int"/>
+            <arg name="num_clients" type="int"/>
         </event>
     </interface>
 </protocol>
