@@ -22,20 +22,21 @@ ShmBuffer::ShmBuffer(int w, int h, wl_shm_format format)
     close(fd);
     for (auto i=0; i<n; i++) {
         auto offset = oneSize*i;
-        auto buffer = wl_shm_pool_create_buffer(pool, offset, width, height, stride, format);
-        _buffers[i] = { ptr+offset, buffer };
+        _buffers[i] = {
+            ptr+offset,
+            wl_unique_ptr<wl_buffer> { wl_shm_pool_create_buffer(pool, offset, width, height, stride, format) },
+        };
     }
     wl_shm_pool_destroy(pool);
 }
 
 ShmBuffer::~ShmBuffer()
 {
-    munmap(_buffers[0].data, _totalSize);
-    for (auto i=0; i<n; i++) {
-        wl_buffer_destroy(_buffers[i].buffer);
+    if (_buffers[0].data) {
+        munmap(_buffers[0].data, _totalSize);
     }
 }
 
 uint8_t* ShmBuffer::data() const { return _buffers[_current].data; }
-wl_buffer* ShmBuffer::buffer() const { return _buffers[_current].buffer; }
+wl_buffer* ShmBuffer::buffer() const { return _buffers[_current].buffer.get(); }
 void ShmBuffer::flip() { _current = 1-_current; }

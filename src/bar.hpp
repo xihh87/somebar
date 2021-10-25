@@ -22,11 +22,9 @@ class Bar {
     static const zwlr_layer_surface_v1_listener _layerSurfaceListener;
     static const wl_callback_listener _frameListener;
 
-    wl_surface *_surface {nullptr};
-    zwlr_layer_surface_v1 *_layerSurface {nullptr};
+    wl_unique_ptr<wl_surface> _surface;
+    wl_unique_ptr<zwlr_layer_surface_v1> _layerSurface;
     QPainter *_painter {nullptr};
-    QFont _font;
-    QFontMetrics _fontMetrics;
     std::optional<ShmBuffer> _bufs;
     int _textY, _x;
     bool _invalid {false};
@@ -45,7 +43,7 @@ class Bar {
     void invalidate();
 public:
     explicit Bar(const wl_output *output);
+    const wl_surface* surface() const;
     void setStatus(const QString &status);
     void click(int x, int y);
-    ~Bar();
 };

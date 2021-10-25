@@ -24,8 +24,8 @@
 
 struct Monitor {
     uint32_t name;
-    wl_output *wlOutput;
-    znet_tapesoftware_dwl_wm_monitor_v1 *dwlMonitor;
+    wl_unique_ptr<wl_output> wlOutput;
+    wl_unique_ptr<znet_tapesoftware_dwl_wm_monitor_v1> dwlMonitor;
     std::optional<Bar> bar;
 };
 
@@ -42,8 +42,8 @@ wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
 znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<QString> tagNames;
+static bool ready;
 static std::vector<Monitor> monitors;
-static std::optional<Bar> bar;
 static std::string statusFifoName;
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
@@ -57,7 +57,7 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
     }
 };
 
-struct PointerState {
+struct SeatState {
     wl_pointer *pointer;
     wl_surface *cursorSurface;
     wl_cursor_image *cursorImage;
@@ -65,33 +65,40 @@ struct PointerState {
     int x, y;
     bool leftButtonClick;
 };
-static PointerState pointerState;
+static SeatState seatState;
+static Bar* barFromSurface(const wl_surface *surface)
+{
+    auto fbar = std::find_if(begin(monitors), end(monitors), [surface](const Monitor &mon) {
+        return mon.bar && mon.bar->surface() == surface;
+    });
+    return fbar != end(monitors) && fbar->bar ? &*fbar->bar : nullptr;
+}
 static const struct wl_pointer_listener pointerListener = {
     .enter = [](void*, wl_pointer *pointer, uint32_t serial,
-                wl_surface*, wl_fixed_t x, wl_fixed_t y)
+                wl_surface *surface, wl_fixed_t x, wl_fixed_t y)
     {
-        pointerState.focusedBar = &bar.value();
-        wl_pointer_set_cursor(pointer, serial, pointerState.cursorSurface,
-            pointerState.cursorImage->hotspot_x, pointerState.cursorImage->hotspot_y);
+        seatState.focusedBar = barFromSurface(surface);
+        wl_pointer_set_cursor(pointer, serial, seatState.cursorSurface,
+            seatState.cursorImage->hotspot_x, seatState.cursorImage->hotspot_y);
     },
     .leave = [](void*, wl_pointer*, uint32_t serial, wl_surface*) {
-        pointerState.focusedBar = nullptr;
+        seatState.focusedBar = nullptr;
     },
     .motion = [](void*, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
-        pointerState.x = wl_fixed_to_int(x);
-        pointerState.y = wl_fixed_to_int(y);
+        seatState.x = wl_fixed_to_int(x);
+        seatState.y = wl_fixed_to_int(y);
     },
     .button = [](void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t pressed) {
         if (button == BTN_LEFT) {
-            pointerState.leftButtonClick = pressed == WL_POINTER_BUTTON_STATE_PRESSED;
+            seatState.leftButtonClick = pressed == WL_POINTER_BUTTON_STATE_PRESSED;
         }
     },
     .axis = [](void*, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { },
     .frame = [](void*, wl_pointer*) {
-        if (!pointerState.focusedBar) return;
-        if (pointerState.leftButtonClick) {
-            pointerState.leftButtonClick = false;
-            pointerState.focusedBar->click(pointerState.x, pointerState.y);
+        if (!seatState.focusedBar) return;
+        if (seatState.leftButtonClick) {
+            seatState.leftButtonClick = false;
+            seatState.focusedBar->click(seatState.x, seatState.y);
         }
     },
     .axis_source = [](void*, wl_pointer*, uint32_t) { },
@@ -103,16 +110,16 @@ static wl_seat *seat;
 static const struct wl_seat_listener seatListener = {
     [](void*, wl_seat*, uint32_t cap)
     {
-        if (!pointerState.pointer && WL_SEAT_CAPABILITY_POINTER) {
+        if (!seatState.pointer && WL_SEAT_CAPABILITY_POINTER) {
             auto cursorTheme = wl_cursor_theme_load(NULL, 24, shm);
             auto cursorImage = wl_cursor_theme_get_cursor(cursorTheme, "left_ptr")->images[0];
-            pointerState.cursorImage = cursorImage;
-            pointerState.cursorSurface = wl_compositor_create_surface(compositor);
-            wl_surface_attach(pointerState.cursorSurface,
+            seatState.cursorImage = cursorImage;
+            seatState.cursorSurface = wl_compositor_create_surface(compositor);
+            wl_surface_attach(seatState.cursorSurface,
                 wl_cursor_image_get_buffer(cursorImage), 0, 0);
-            wl_surface_commit(pointerState.cursorSurface);
-            pointerState.pointer = wl_seat_get_pointer(seat);
-            wl_pointer_add_listener(pointerState.pointer, &pointerListener, nullptr);
+            wl_surface_commit(seatState.cursorSurface);
+            seatState.pointer = wl_seat_get_pointer(seat);
+            wl_pointer_add_listener(seatState.pointer, &pointerListener, nullptr);
         }
     },
     [](void*, wl_seat*, const char *name) { }
@@ -125,21 +132,26 @@ static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
 };
 
 static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorListener {
-    .tag = [](void*, znet_tapesoftware_dwl_wm_monitor_v1*, int tag, int active, int numClients) {
-        printf("tag %s: active=%d, num_clients=%d\n", qPrintable(tagNames[tag]), active, numClients);
+    .tag = [](void*, znet_tapesoftware_dwl_wm_monitor_v1*, int tag, int active, int numClients, int urgent) {
+        printf("tag %s: active=%d, num_clients=%d, urgent=%d\n", qPrintable(tagNames[tag]), active, numClients, urgent);
+    },
+    .frame = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*) {
+        auto mon = static_cast<Monitor*>(mv);
+        if (!mon->bar) {
+            mon->bar.emplace(mon->wlOutput.get());
+        }
     }
 };
 
-static void setupOutput(Monitor &monitor) {
-    monitor.dwlMonitor = znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput);
-    znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor, &dwlWmMonitorListener, &monitor);
-    monitor.bar.emplace(monitor.wlOutput);
+static void setupMonitor(Monitor &monitor) {
+    monitor.dwlMonitor.reset(znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput.get()));
+    znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
 }
 
-static void onOutput(int name, wl_output *output) {
-    auto& monitor = monitors.emplace_back(name, output);
-    if (dwlWm) {
-        setupOutput(monitor);
+static void onOutput(uint32_t name, wl_output *output) {
+    auto& m = monitors.emplace_back(Monitor {name, wl_unique_ptr<wl_output> {output}});
+    if (ready) {
+        setupMonitor(m);
     }
 }
 
@@ -153,10 +165,9 @@ static void onReady()
     requireGlobal(dwlWm, "znet_tapesoftware_dwl_wm_v1");
     setupStatusFifo();
     wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
+    ready = true;
     for (auto& monitor : monitors) {
-        auto monitor = znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, output);
-        printf("created monitor %p for output %p\n", monitor, output);
-        bar.emplace(output);
+        setupMonitor(monitor);
     }
 }
 
@@ -198,8 +209,10 @@ static void onStatus()
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
     auto str = QString::fromUtf8(buffer, n);
-    if (bar) {
-        bar->setStatus(str);
+    for (auto &monitor : monitors) {
+        if (monitor.bar) {
+            monitor.bar->setStatus(str);
+        }
     }
 }
 
@@ -230,13 +243,23 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
         wl_seat_add_listener(seat, &seatListener, nullptr);
     }
     if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
-        outputs.push_back(output);
+        onOutput(name, output);
     }
     if (reg.handle(dwlWm, znet_tapesoftware_dwl_wm_v1_interface, 1)) {
         znet_tapesoftware_dwl_wm_v1_add_listener(dwlWm, &dwlWmListener, nullptr);
     }
 }
-static const struct wl_registry_listener registry_listener = { registryHandleGlobal, nullptr };
+static void registryHandleRemove(void*, wl_registry *registry, uint32_t name)
+{
+    auto it = std::find_if(begin(monitors), end(monitors), [name](const Monitor &m) { return m.name == name; });
+    if (it != end(monitors)) {
+        monitors.erase(it);
+    }
+}
+static const struct wl_registry_listener registry_listener = {
+    .global = registryHandleGlobal,
+    .global_remove = registryHandleRemove,
+};
 
 int main(int argc, char **argv)
 {
@@ -273,7 +296,14 @@ int main(int argc, char **argv)
 
     QSocketNotifier displayReadNotifier(wl_display_get_fd(display), QSocketNotifier::Read);
     displayReadNotifier.setEnabled(true);
-    QObject::connect(&displayReadNotifier, &QSocketNotifier::activated, [=]() { wl_display_dispatch(display); });
+    QObject::connect(&displayReadNotifier, &QSocketNotifier::activated, [=]() {
+        auto res = wl_display_dispatch(display);
+        if (res < 0) {
+            perror("wl_display_dispatch");
+            cleanup();
+            exit(1);
+        }
+    });
     displayWriteNotifier = new QSocketNotifier(wl_display_get_fd(display), QSocketNotifier::Write);
     displayWriteNotifier->setEnabled(false);
     QObject::connect(displayWriteNotifier, &QSocketNotifier::activated, waylandWriteReady);

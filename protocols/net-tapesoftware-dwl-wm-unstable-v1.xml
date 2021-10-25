@@ -66,6 +66,12 @@
             <arg name="tag" type="int"/>
             <arg name="active" type="int"/>
             <arg name="num_clients" type="int"/>
+            <arg name="urgent" type="int"/>
+        </event>
+
+        <event name="frame">
+            <description summary="sent after all other events have been sent. allows for atomic updates.">
+            </description>
         </event>
     </interface>
 </protocol>
