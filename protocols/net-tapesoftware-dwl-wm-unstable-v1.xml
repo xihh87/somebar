@@ -55,6 +55,12 @@
         <description summary="control one monitor">
         </description>
 
+        <enum name="tag_state">
+          <entry name="none" value="0" summary="no state"/>
+          <entry name="active" value="1" summary="tag is active"/>
+          <entry name="urgent" value="2" summary="tag has at least one urgent client"/>
+        </enum>
+
         <request name="release" type="destructor">
             <description summary="release dwl_monitor">
             </description>
@@ -64,9 +70,9 @@
             <description summary="sent every time a tag state gets updated">
             </description>
             <arg name="tag" type="int"/>
-            <arg name="active" type="int"/>
+            <arg name="state" type="uint" enum="tag_state"/>
             <arg name="num_clients" type="int"/>
-            <arg name="urgent" type="int"/>
+            <arg name="focused_client" type="int" summary="-1 if there is no focused client"/>
         </event>
 
         <event name="frame">

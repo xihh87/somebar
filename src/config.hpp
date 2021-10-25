@@ -4,7 +4,7 @@
 #pragma once
 #include "common.hpp"
 
-constexpr bool topbar = 1;
+constexpr bool topbar = true;
 
 constexpr int paddingX = 10;
 constexpr int paddingY = 3;
@@ -15,3 +15,4 @@ constexpr bool fontBold = true;
 
 constexpr ColorScheme colorInactive = {QColor(255, 255, 255), QColor(0, 0, 0)};
 constexpr ColorScheme colorActive = {QColor(255, 255, 255), QColor(0, 0, 255)};
+constexpr ColorScheme colorUrgent = {colorActive.bg, colorActive.fg};

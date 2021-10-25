@@ -27,6 +27,7 @@ struct Monitor {
     wl_unique_ptr<wl_output> wlOutput;
     wl_unique_ptr<znet_tapesoftware_dwl_wm_monitor_v1> dwlMonitor;
     std::optional<Bar> bar;
+    bool created;
 };
 
 static void waylandFlush();
@@ -44,6 +45,7 @@ znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<QString> tagNames;
 static bool ready;
 static std::vector<Monitor> monitors;
+static QString lastStatus;
 static std::string statusFifoName;
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
@@ -68,10 +70,10 @@ struct SeatState {
 static SeatState seatState;
 static Bar* barFromSurface(const wl_surface *surface)
 {
-    auto fbar = std::find_if(begin(monitors), end(monitors), [surface](const Monitor &mon) {
+    auto mon = std::find_if(begin(monitors), end(monitors), [surface](const Monitor &mon) {
         return mon.bar && mon.bar->surface() == surface;
     });
-    return fbar != end(monitors) && fbar->bar ? &*fbar->bar : nullptr;
+    return mon != end(monitors) && mon->bar ? &*mon->bar : nullptr;
 }
 static const struct wl_pointer_listener pointerListener = {
     .enter = [](void*, wl_pointer *pointer, uint32_t serial,
@@ -132,19 +134,24 @@ static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
 };
 
 static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorListener {
-    .tag = [](void*, znet_tapesoftware_dwl_wm_monitor_v1*, int tag, int active, int numClients, int urgent) {
-        printf("tag %s: active=%d, num_clients=%d, urgent=%d\n", qPrintable(tagNames[tag]), active, numClients, urgent);
+    .tag = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t tag, uint32_t state, int32_t numClients, int32_t focusedClient) {
+        auto mon = static_cast<Monitor*>(mv);
+        mon->bar->setTag(tag, static_cast<znet_tapesoftware_dwl_wm_monitor_v1_tag_state>(state), numClients, focusedClient);
     },
     .frame = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*) {
         auto mon = static_cast<Monitor*>(mv);
-        if (!mon->bar) {
-            mon->bar.emplace(mon->wlOutput.get());
+        if (mon->created) {
+            mon->bar->invalidate();
+        } else {
+            mon->bar->create(mon->wlOutput.get());
         }
     }
 };
 
 static void setupMonitor(Monitor &monitor) {
     monitor.dwlMonitor.reset(znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput.get()));
+    monitor.bar.emplace();
+    monitor.bar->setStatus(lastStatus);
     znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
 }
 
@@ -208,10 +215,11 @@ static void onStatus()
 {
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
-    auto str = QString::fromUtf8(buffer, n);
+    lastStatus = QString::fromUtf8(buffer, n);
     for (auto &monitor : monitors) {
         if (monitor.bar) {
-            monitor.bar->setStatus(str);
+            monitor.bar->setStatus(lastStatus);
+            monitor.bar->invalidate();
         }
     }
 }

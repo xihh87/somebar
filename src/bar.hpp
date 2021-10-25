@@ -14,7 +14,9 @@
 
 struct Tag {
     QString name;
-    bool active;
+    znet_tapesoftware_dwl_wm_monitor_v1_tag_state state;
+    int numClients;
+    int focusedClient;
     int x;
 };
 
@@ -40,10 +42,12 @@ class Bar {
     void renderText(const QString &text);
     int textWidth(const QString &text);
     void setColorScheme(const ColorScheme &scheme);
-    void invalidate();
 public:
-    explicit Bar(const wl_output *output);
+    Bar();
     const wl_surface* surface() const;
+    void create(wl_output *output);
+    void setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient);
     void setStatus(const QString &status);
+    void invalidate();
     void click(int x, int y);
 };

@@ -30,7 +30,16 @@ static QFont getFont()
 static QFont font = getFont();
 static QFontMetrics fontMetrics = QFontMetrics {font};
 
-Bar::Bar(const wl_output *output)
+const wl_surface* Bar::surface() const { return _surface.get(); }
+
+Bar::Bar()
+{
+    for (auto tag : tagNames) {
+        _tags.push_back({ tag, ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, 0 });
+    }
+}
+
+void Bar::create(wl_output *output)
 {
     _surface.reset(wl_compositor_create_surface(compositor));
     _layerSurface.reset(zwlr_layer_shell_v1_get_layer_surface(wlrLayerShell,
@@ -47,21 +56,15 @@ Bar::Bar(const wl_output *output)
     zwlr_layer_surface_v1_set_exclusive_zone(_layerSurface.get(), barSize);
     wl_surface_commit(_surface.get());
 
-    for (auto tag : tagNames) {
-        _tags.push_back({ tag, false });
-    }
     _windowTitle = "Window title";
     _status = "Status";
 }
-
-const wl_surface* Bar::surface() const { return _surface.get(); }
 
 void Bar::click(int x, int)
 {
     for (auto tag=_tags.rbegin(); tag != _tags.rend(); tag++) {
         if (x > tag->x) {
-            tag->active = !tag->active;
-            invalidate();
+            // todo toggle
             return;
         }
     }
@@ -76,10 +79,17 @@ void Bar::invalidate()
     wl_surface_commit(_surface.get());
 }
 
+void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient)
+{
+    auto& t = _tags[tag];
+    t.state = state;
+    t.numClients = numClients;
+    t.focusedClient = focusedClient;
+}
+
 void Bar::setStatus(const QString &status)
 {
     _status = status;
-    invalidate();
 }
 
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
@@ -103,8 +113,6 @@ void Bar::render()
     _x = 0;
     painter.setFont(font);
 
-    setColorScheme(colorActive);
-    painter.fillRect(0, 0, img.width(), img.height(), painter.brush());
     renderTags();
     setColorScheme(colorActive);
     renderText(_windowTitle);
@@ -128,8 +136,17 @@ void Bar::renderTags()
 {
     for (auto &tag : _tags) {
         tag.x = _x;
-        setColorScheme(tag.active ? colorActive : colorInactive);
+        setColorScheme(tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT ? colorUrgent
+            : tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE ? colorActive : colorInactive);
         renderText(tag.name);
+        auto indicators = qMin(tag.numClients, _bufs->height/2);
+        for (auto ind = 0; ind < indicators; ind++) {
+            if (ind == tag.focusedClient) {
+                _painter->drawLine(tag.x, ind*2, tag.x+5, ind*2);
+            } else {
+                _painter->drawPoint(tag.x, ind*2);
+            }
+        }
     }
 }
 
@@ -143,9 +160,9 @@ void Bar::renderText(const QString &text)
 
 void Bar::renderStatus()
 {
+    _painter->fillRect(_x, 0, _bufs->width-_x, _bufs->height, _painter->brush());
     auto size = textWidth(_status) + paddingX*2;
     _x = _bufs->width - size;
-    _painter->fillRect(_x, 0, size, _bufs->height, _painter->brush());
     _painter->drawText(paddingX+_x, _textY, _status);
     _x = _bufs->width;
 }
