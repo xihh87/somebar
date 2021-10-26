@@ -13,22 +13,24 @@
 #include "shm_buffer.hpp"
 
 struct Tag {
-    QString name;
     znet_tapesoftware_dwl_wm_monitor_v1_tag_state state;
     int numClients;
     int focusedClient;
     int x;
 };
 
+struct Monitor;
 class Bar {
     static const zwlr_layer_surface_v1_listener _layerSurfaceListener;
     static const wl_callback_listener _frameListener;
 
     wl_unique_ptr<wl_surface> _surface;
     wl_unique_ptr<zwlr_layer_surface_v1> _layerSurface;
+    Monitor *_mon;
     QPainter *_painter {nullptr};
     std::optional<ShmBuffer> _bufs;
     int _textY, _x;
+    int _statusX, _titleX, _layoutX;
     bool _invalid {false};
 
     std::vector<Tag> _tags;
@@ -45,7 +47,7 @@ class Bar {
     int textWidth(const QString &text);
     void setColorScheme(const ColorScheme &scheme);
 public:
-    Bar();
+    Bar(Monitor *mon);
     const wl_surface* surface() const;
     void create(wl_output *output);
     void setSelected(bool selected);
@@ -54,5 +56,5 @@ public:
     void setTitle(const char *title);
     void setStatus(const QString &status);
     void invalidate();
-    void click(int x, int y);
+    void click(int x, int y, int btn, unsigned int modifiers);
 };

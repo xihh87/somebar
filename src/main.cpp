@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <linux/input-event-codes.h>
 #include <optional>
+#include <vector>
 #include <QGuiApplication>
 #include <QSocketNotifier>
 #include <wayland-client.h>
@@ -44,6 +45,7 @@ zwlr_layer_shell_v1 *wlrLayerShell;
 znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<QString> tagNames;
 std::vector<QString> layoutNames;
+static xdg_wm_base *xdgWmBase;
 static bool ready;
 static std::vector<Monitor> monitors;
 static QString lastStatus;
@@ -53,7 +55,19 @@ static int statusFifoWriter {-1};
 static QSocketNotifier *displayWriteNotifier;
 static bool quitting {false};
 
-static xdg_wm_base *xdgWmBase;
+void toggleview(Monitor &m, const Arg &arg)
+{
+    znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), arg.ui, 0);
+}
+void view(Monitor &m, const Arg &arg)
+{
+    znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), arg.ui, 1);
+}
+void setlayout(Monitor &m, const Arg &arg)
+{
+    znet_tapesoftware_dwl_wm_monitor_v1_set_layout(m.dwlMonitor.get(), arg.ui);
+}
+
 static const struct xdg_wm_base_listener xdgWmBaseListener = {
     [](void*, xdg_wm_base *sender, uint32_t serial) {
         xdg_wm_base_pong(sender, serial);
@@ -66,7 +80,7 @@ struct SeatState {
     wl_cursor_image *cursorImage;
     Bar *focusedBar;
     int x, y;
-    bool leftButtonClick;
+    std::vector<int> btns;
 };
 static SeatState seatState;
 static Bar* barFromSurface(const wl_surface *surface)
@@ -92,17 +106,20 @@ static const struct wl_pointer_listener pointerListener = {
         seatState.y = wl_fixed_to_int(y);
     },
     .button = [](void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t pressed) {
-        if (button == BTN_LEFT) {
-            seatState.leftButtonClick = pressed == WL_POINTER_BUTTON_STATE_PRESSED;
+        auto it = std::find(begin(seatState.btns), end(seatState.btns), button);
+        if (pressed == WL_POINTER_BUTTON_STATE_PRESSED && it == end(seatState.btns)) {
+            seatState.btns.push_back(button);
+        } else if (pressed == WL_POINTER_BUTTON_STATE_RELEASED && it != end(seatState.btns)) {
+            seatState.btns.erase(it);
         }
     },
     .axis = [](void*, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { },
     .frame = [](void*, wl_pointer*) {
         if (!seatState.focusedBar) return;
-        if (seatState.leftButtonClick) {
-            seatState.leftButtonClick = false;
-            seatState.focusedBar->click(seatState.x, seatState.y);
+        for (auto btn : seatState.btns) {
+            seatState.focusedBar->click(seatState.x, seatState.y, btn, 0);
         }
+        seatState.btns.clear();
     },
     .axis_source = [](void*, wl_pointer*, uint32_t) { },
     .axis_stop = [](void*, wl_pointer*, uint32_t, uint32_t) { },
@@ -138,15 +155,15 @@ static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
 };
 
 static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorListener {
-    .selected = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t selected) {
+    .selected = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t selected) {
         auto mon = static_cast<Monitor*>(mv);
         mon->bar->setSelected(selected);
     },
-    .tag = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t tag, uint32_t state, int32_t numClients, int32_t focusedClient) {
+    .tag = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t tag, uint32_t state, uint32_t numClients, int32_t focusedClient) {
         auto mon = static_cast<Monitor*>(mv);
         mon->bar->setTag(tag, static_cast<znet_tapesoftware_dwl_wm_monitor_v1_tag_state>(state), numClients, focusedClient);
     },
-    .layout = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, int32_t layout) {
+    .layout = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t layout) {
         auto mon = static_cast<Monitor*>(mv);
         mon->bar->setLayout(layout);
     },
@@ -160,13 +177,14 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
             mon->bar->invalidate();
         } else {
             mon->bar->create(mon->wlOutput.get());
+            mon->created = true;
         }
     }
 };
 
 static void setupMonitor(Monitor &monitor) {
     monitor.dwlMonitor.reset(znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput.get()));
-    monitor.bar.emplace();
+    monitor.bar.emplace(&monitor);
     monitor.bar->setStatus(lastStatus);
     znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
 }
@@ -255,7 +273,6 @@ struct HandleGlobalHelper {
 static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
 {
     auto reg = HandleGlobalHelper { registry, name, interface };
-    printf("got global: %s v%d\n", interface, version);
     if (reg.handle(compositor, wl_compositor_interface, 4)) return;
     if (reg.handle(shm, wl_shm_interface, 1)) return;
     if (reg.handle(wlrLayerShell, zwlr_layer_shell_v1_interface, 4)) return;

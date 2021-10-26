@@ -32,10 +32,11 @@ static QFontMetrics fontMetrics = QFontMetrics {font};
 
 const wl_surface* Bar::surface() const { return _surface.get(); }
 
-Bar::Bar()
+Bar::Bar(Monitor *mon)
 {
-    for (auto tag : tagNames) {
-        _tags.push_back({ tag, ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, 0 });
+    _mon = mon;
+    for (auto i=0u; i<tagNames.size(); i++) {
+        _tags.push_back({ ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, 0 });
     }
 }
 
@@ -57,11 +58,29 @@ void Bar::create(wl_output *output)
     wl_surface_commit(_surface.get());
 }
 
-void Bar::click(int x, int)
+void Bar::click(int x, int, int btn, unsigned int modifiers)
 {
-    for (auto tag=_tags.rbegin(); tag != _tags.rend(); tag++) {
-        if (x > tag->x) {
-            // todo toggle
+    Arg arg = {0};
+    Arg *argp = nullptr;
+    Control control = Control::None;
+    if (x > _statusX) {
+        control = Control::StatusText;
+    } else if (x > _titleX) {
+        control = Control::WinTitle;
+    } else if (x > _layoutX) {
+        control = Control::LayoutSymbol;
+    } else for (auto tag = _tags.size()-1; tag >= 0; tag--) {
+        if (x > _tags[tag].x) {
+            control = Control::TagBar;
+            arg.ui = 1<<tag;
+            argp = &arg;
+            break;
+        }
+    }
+    for (auto i = 0u; i < sizeof(buttons)/sizeof(buttons[0]); i++) {
+        const auto& button = buttons[i];
+        if (button.control == control && button.btn == btn && button.modifiers == modifiers) {
+            button.func(*_mon, *(argp ? argp : &button.arg));
             return;
         }
     }
@@ -112,8 +131,11 @@ void Bar::render()
 
     renderTags();
     setColorScheme(_selected ? colorActive : colorInactive);
+    _layoutX = _x;
     renderText(layoutNames[_layout]);
+    _titleX = _x;
     renderText(_title);
+    _statusX = _x;
     renderStatus();
     
     _painter = nullptr;
@@ -132,11 +154,12 @@ void Bar::setColorScheme(const ColorScheme &scheme)
 
 void Bar::renderTags()
 {
-    for (auto &tag : _tags) {
+    for (auto i=0u; i<_tags.size(); i++) {
+        auto& tag = _tags[i];
         tag.x = _x;
         setColorScheme(tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT ? colorUrgent
             : tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE ? colorActive : colorInactive);
-        renderText(tag.name);
+        renderText(tagNames[i]);
         auto indicators = qMin(tag.numClients, _bufs->height/2);
         for (auto ind = 0; ind < indicators; ind++) {
             if (ind == tag.focusedClient) {

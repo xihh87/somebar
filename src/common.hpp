@@ -2,13 +2,25 @@
 // See LICENSE file for copyright and license details.
 
 #pragma once
-#include <wayland-client.h>
 #include <memory>
 #include <vector>
+#include <wayland-client.h>
+#include <linux/input-event-codes.h>
 #include <QColor>
 #include <QString>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
+
+struct ColorScheme {
+    QColor fg, bg;
+};
+union Arg {
+	int i;
+	unsigned int ui;
+	float f;
+	const void *v;
+};
+struct Monitor;
 
 extern wl_display *display;
 extern wl_compositor *compositor;
@@ -17,8 +29,17 @@ extern zwlr_layer_shell_v1 *wlrLayerShell;
 extern std::vector<QString> tagNames;
 extern std::vector<QString> layoutNames;
 
-struct ColorScheme {
-    QColor fg, bg;
+void toggleview(Monitor &m, const Arg &arg);
+void view(Monitor &m, const Arg &arg);
+void setlayout(Monitor &m, const Arg &arg);
+
+enum class Control { None, TagBar, LayoutSymbol, WinTitle, StatusText };
+struct Button {
+	Control control;
+	unsigned int modifiers; // todo xkbcommon
+	int btn; // <linux/input-event-codes.h>
+	void (*func)(Monitor &mon, const Arg &arg);
+	const Arg arg;
 };
 
 // wayland smart pointers

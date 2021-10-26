@@ -75,22 +75,22 @@
         <event name="selected">
             <description summary="updates the selected state of the monitor">
             </description>
-            <arg name="selected" type="int"/>
+            <arg name="selected" type="uint"/>
         </event>
 
         <event name="tag">
             <description summary="updates the state of one tag">
             </description>
-            <arg name="tag" type="int"/>
+            <arg name="tag" type="uint"/>
             <arg name="state" type="uint" enum="tag_state"/>
-            <arg name="num_clients" type="int"/>
+            <arg name="num_clients" type="uint"/>
             <arg name="focused_client" type="int" summary="-1 if there is no focused client"/>
         </event>
 
         <event name="layout">
             <description summary="updates the selected layout">
             </description>
-            <arg name="layout" type="int"/>
+            <arg name="layout" type="uint"/>
         </event>
 
         <event name="title">
@@ -103,5 +103,18 @@
             <description summary="sent after all other events have been sent. allows for atomic updates.">
             </description>
         </event>
+
+        <request name="set_tags">
+            <description summary="sets the active tags on this monitor. changes are applied immediately.">
+            </description>
+            <arg name="tagmask" type="uint"/>
+            <arg name="toggle_tagset" type="uint"/>
+        </request>
+
+        <request name="set_layout">
+            <description summary="sets the active layout on this monitor. changes are applied immediately.">
+            </description>
+            <arg name="layout" type="uint"/>
+        </request>
     </interface>
 </protocol>
