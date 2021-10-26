@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <linux/input-event-codes.h>
+#include <list>
 #include <optional>
 #include <vector>
 #include <QGuiApplication>
@@ -30,6 +31,17 @@ struct Monitor {
     std::optional<Bar> bar;
     bool created;
 };
+struct SeatPointer {
+    wl_unique_ptr<wl_pointer> wlPointer;
+    Bar *focusedBar;
+    int x, y;
+    std::vector<int> btns;
+};
+struct Seat {
+    uint32_t name;
+    wl_unique_ptr<wl_seat> wlSeat;
+    std::optional<SeatPointer> pointer;
+};
 
 static void waylandFlush();
 static void waylandWriteReady();
@@ -46,8 +58,11 @@ znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<QString> tagNames;
 std::vector<QString> layoutNames;
 static xdg_wm_base *xdgWmBase;
+static wl_surface *cursorSurface;
+static wl_cursor_image *cursorImage;
 static bool ready;
-static std::vector<Monitor> monitors;
+static std::list<Monitor> monitors;
+static std::list<Seat> seats;
 static QString lastStatus;
 static std::string statusFifoName;
 static int statusFifoFd {-1};
@@ -74,15 +89,6 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
     }
 };
 
-struct SeatState {
-    wl_pointer *pointer;
-    wl_surface *cursorSurface;
-    wl_cursor_image *cursorImage;
-    Bar *focusedBar;
-    int x, y;
-    std::vector<int> btns;
-};
-static SeatState seatState;
 static Bar* barFromSurface(const wl_surface *surface)
 {
     auto mon = std::find_if(begin(monitors), end(monitors), [surface](const Monitor &mon) {
@@ -91,58 +97,66 @@ static Bar* barFromSurface(const wl_surface *surface)
     return mon != end(monitors) && mon->bar ? &*mon->bar : nullptr;
 }
 static const struct wl_pointer_listener pointerListener = {
-    .enter = [](void*, wl_pointer *pointer, uint32_t serial,
+    .enter = [](void *sp, wl_pointer *pointer, uint32_t serial,
                 wl_surface *surface, wl_fixed_t x, wl_fixed_t y)
     {
-        seatState.focusedBar = barFromSurface(surface);
-        wl_pointer_set_cursor(pointer, serial, seatState.cursorSurface,
-            seatState.cursorImage->hotspot_x, seatState.cursorImage->hotspot_y);
+        auto& seat = *static_cast<Seat*>(sp);
+        seat.pointer->focusedBar = barFromSurface(surface);
+        if (!cursorImage) {
+            auto cursorTheme = wl_cursor_theme_load(NULL, 24, shm);
+            cursorImage = wl_cursor_theme_get_cursor(cursorTheme, "left_ptr")->images[0];
+            cursorSurface = wl_compositor_create_surface(compositor);
+            wl_surface_attach(cursorSurface, wl_cursor_image_get_buffer(cursorImage), 0, 0);
+            wl_surface_commit(cursorSurface);
+        }
+        wl_pointer_set_cursor(pointer, serial, cursorSurface,
+            cursorImage->hotspot_x, cursorImage->hotspot_y);
     },
-    .leave = [](void*, wl_pointer*, uint32_t serial, wl_surface*) {
-        seatState.focusedBar = nullptr;
+    .leave = [](void *sp, wl_pointer*, uint32_t serial, wl_surface*) {
+        auto& seat = *static_cast<Seat*>(sp);
+        seat.pointer->focusedBar = nullptr;
     },
-    .motion = [](void*, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
-        seatState.x = wl_fixed_to_int(x);
-        seatState.y = wl_fixed_to_int(y);
+    .motion = [](void *sp, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
+        auto& seat = *static_cast<Seat*>(sp);
+        seat.pointer->x = wl_fixed_to_int(x);
+        seat.pointer->y = wl_fixed_to_int(y);
     },
-    .button = [](void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t pressed) {
-        auto it = std::find(begin(seatState.btns), end(seatState.btns), button);
-        if (pressed == WL_POINTER_BUTTON_STATE_PRESSED && it == end(seatState.btns)) {
-            seatState.btns.push_back(button);
-        } else if (pressed == WL_POINTER_BUTTON_STATE_RELEASED && it != end(seatState.btns)) {
-            seatState.btns.erase(it);
+    .button = [](void *sp, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t pressed) {
+        auto& seat = *static_cast<Seat*>(sp);
+        auto it = std::find(begin(seat.pointer->btns), end(seat.pointer->btns), button);
+        if (pressed == WL_POINTER_BUTTON_STATE_PRESSED && it == end(seat.pointer->btns)) {
+            seat.pointer->btns.push_back(button);
+        } else if (pressed == WL_POINTER_BUTTON_STATE_RELEASED && it != end(seat.pointer->btns)) {
+            seat.pointer->btns.erase(it);
         }
     },
-    .axis = [](void*, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { },
-    .frame = [](void*, wl_pointer*) {
-        if (!seatState.focusedBar) return;
-        for (auto btn : seatState.btns) {
-            seatState.focusedBar->click(seatState.x, seatState.y, btn, 0);
+    .axis = [](void *sp, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { },
+    .frame = [](void *sp, wl_pointer*) {
+        auto& seat = *static_cast<Seat*>(sp);
+        if (!seat.pointer->focusedBar) return;
+        for (auto btn : seat.pointer->btns) {
+            seat.pointer->focusedBar->click(seat.pointer->x, seat.pointer->y, btn, 0);
         }
-        seatState.btns.clear();
+        seat.pointer->btns.clear();
     },
     .axis_source = [](void*, wl_pointer*, uint32_t) { },
     .axis_stop = [](void*, wl_pointer*, uint32_t, uint32_t) { },
     .axis_discrete = [](void*, wl_pointer*, uint32_t, int32_t) { },
 };
 
-static wl_seat *seat;
 static const struct wl_seat_listener seatListener = {
-    [](void*, wl_seat*, uint32_t cap)
+    .capabilities = [](void *sp, wl_seat*, uint32_t cap)
     {
-        if (!seatState.pointer && WL_SEAT_CAPABILITY_POINTER) {
-            auto cursorTheme = wl_cursor_theme_load(NULL, 24, shm);
-            auto cursorImage = wl_cursor_theme_get_cursor(cursorTheme, "left_ptr")->images[0];
-            seatState.cursorImage = cursorImage;
-            seatState.cursorSurface = wl_compositor_create_surface(compositor);
-            wl_surface_attach(seatState.cursorSurface,
-                wl_cursor_image_get_buffer(cursorImage), 0, 0);
-            wl_surface_commit(seatState.cursorSurface);
-            seatState.pointer = wl_seat_get_pointer(seat);
-            wl_pointer_add_listener(seatState.pointer, &pointerListener, nullptr);
+        auto& seat = *static_cast<Seat*>(sp);
+        auto hasPointer = cap & WL_SEAT_CAPABILITY_POINTER;
+        if (!seat.pointer && hasPointer) {
+            seat.pointer.emplace(SeatPointer {wl_unique_ptr<wl_pointer> {wl_seat_get_pointer(seat.wlSeat.get())}});
+            wl_pointer_add_listener(seat.pointer->wlPointer.get(), &pointerListener, &seat);
+        } else if (seat.pointer && !hasPointer) {
+            seat.pointer.reset();
         }
     },
-    [](void*, wl_seat*, const char *name) { }
+    .name = [](void*, wl_seat*, const char *name) { }
 };
 
 static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
@@ -189,19 +203,11 @@ static void setupMonitor(Monitor &monitor) {
     znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
 }
 
-static void onOutput(uint32_t name, wl_output *output) {
-    auto& m = monitors.emplace_back(Monitor {name, wl_unique_ptr<wl_output> {output}});
-    if (ready) {
-        setupMonitor(m);
-    }
-}
-
 // called after we have received the initial batch of globals
 static void onReady()
 {
     requireGlobal(compositor, "wl_compositor");
     requireGlobal(shm, "wl_shm");
-    requireGlobal(seat, "wl_seat");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
     requireGlobal(dwlWm, "znet_tapesoftware_dwl_wm_v1");
     setupStatusFifo();
@@ -280,22 +286,27 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
         xdg_wm_base_add_listener(xdgWmBase, &xdgWmBaseListener, nullptr);
         return;
     }
-    if (seat == nullptr && reg.handle(seat, wl_seat_interface, 7)) {
-        wl_seat_add_listener(seat, &seatListener, nullptr);
-    }
-    if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
-        onOutput(name, output);
-    }
     if (reg.handle(dwlWm, znet_tapesoftware_dwl_wm_v1_interface, 1)) {
         znet_tapesoftware_dwl_wm_v1_add_listener(dwlWm, &dwlWmListener, nullptr);
+        return;
+    }
+    if (wl_seat *wlSeat; reg.handle(wlSeat, wl_seat_interface, 7)) {
+        auto& seat = seats.emplace_back(Seat {name, wl_unique_ptr<wl_seat> {wlSeat}});
+        wl_seat_add_listener(wlSeat, &seatListener, &seat);
+        return;
+    }
+    if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
+        auto& m = monitors.emplace_back(Monitor {name, wl_unique_ptr<wl_output> {output}});
+        if (ready) {
+            setupMonitor(m);
+        }
+        return;
     }
 }
 static void registryHandleRemove(void*, wl_registry *registry, uint32_t name)
 {
-    auto it = std::find_if(begin(monitors), end(monitors), [name](const Monitor &m) { return m.name == name; });
-    if (it != end(monitors)) {
-        monitors.erase(it);
-    }
+    monitors.remove_if([name](const Monitor &mon) { return mon.name == name; });
+    seats.remove_if([name](const Seat &seat) { return seat.name == name; });
 }
 static const struct wl_registry_listener registry_listener = {
     .global = registryHandleGlobal,

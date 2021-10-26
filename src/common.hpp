@@ -50,8 +50,10 @@ struct wl_deleter;
 template<typename T>
 using wl_unique_ptr = std::unique_ptr<T, wl_deleter<T>>;
 
-WL_DELETER(wl_surface, wl_surface_destroy);
-WL_DELETER(zwlr_layer_surface_v1, zwlr_layer_surface_v1_destroy);
 WL_DELETER(wl_buffer, wl_buffer_destroy);
 WL_DELETER(wl_output, wl_output_release);
+WL_DELETER(wl_pointer, wl_pointer_release);
+WL_DELETER(wl_seat, wl_seat_release);
+WL_DELETER(wl_surface, wl_surface_destroy);
 WL_DELETER(znet_tapesoftware_dwl_wm_monitor_v1, znet_tapesoftware_dwl_wm_monitor_v1_release);
+WL_DELETER(zwlr_layer_surface_v1, zwlr_layer_surface_v1_destroy);
