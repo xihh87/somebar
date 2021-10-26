@@ -58,20 +58,20 @@ void Bar::create(wl_output *output)
     wl_surface_commit(_surface.get());
 }
 
-void Bar::click(int x, int, int btn, unsigned int modifiers)
+void Bar::click(int x, int, int btn)
 {
     Arg arg = {0};
     Arg *argp = nullptr;
-    Control control = Control::None;
+    int control = ClkNone;
     if (x > _statusX) {
-        control = Control::StatusText;
+        control = ClkStatusText;
     } else if (x > _titleX) {
-        control = Control::WinTitle;
+        control = ClkWinTitle;
     } else if (x > _layoutX) {
-        control = Control::LayoutSymbol;
+        control = ClkLayoutSymbol;
     } else for (auto tag = _tags.size()-1; tag >= 0; tag--) {
         if (x > _tags[tag].x) {
-            control = Control::TagBar;
+            control = ClkTagBar;
             arg.ui = 1<<tag;
             argp = &arg;
             break;
@@ -79,7 +79,7 @@ void Bar::click(int x, int, int btn, unsigned int modifiers)
     }
     for (auto i = 0u; i < sizeof(buttons)/sizeof(buttons[0]); i++) {
         const auto& button = buttons[i];
-        if (button.control == control && button.btn == btn && button.modifiers == modifiers) {
+        if (button.control == control && button.btn == btn) {
             button.func(*_mon, *(argp ? argp : &button.arg));
             return;
         }

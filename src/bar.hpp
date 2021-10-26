@@ -56,5 +56,5 @@ public:
     void setTitle(const char *title);
     void setStatus(const QString &status);
     void invalidate();
-    void click(int x, int y, int btn, unsigned int modifiers);
+    void click(int x, int y, int btn);
 };

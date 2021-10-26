@@ -135,7 +135,7 @@ static const struct wl_pointer_listener pointerListener = {
         auto& seat = *static_cast<Seat*>(sp);
         if (!seat.pointer->focusedBar) return;
         for (auto btn : seat.pointer->btns) {
-            seat.pointer->focusedBar->click(seat.pointer->x, seat.pointer->y, btn, 0);
+            seat.pointer->focusedBar->click(seat.pointer->x, seat.pointer->y, btn);
         }
         seat.pointer->btns.clear();
     },
@@ -150,7 +150,8 @@ static const struct wl_seat_listener seatListener = {
         auto& seat = *static_cast<Seat*>(sp);
         auto hasPointer = cap & WL_SEAT_CAPABILITY_POINTER;
         if (!seat.pointer && hasPointer) {
-            seat.pointer.emplace(SeatPointer {wl_unique_ptr<wl_pointer> {wl_seat_get_pointer(seat.wlSeat.get())}});
+            auto &pointer = seat.pointer.emplace();
+            pointer.wlPointer = wl_unique_ptr<wl_pointer> {wl_seat_get_pointer(seat.wlSeat.get())};
             wl_pointer_add_listener(seat.pointer->wlPointer.get(), &pointerListener, &seat);
         } else if (seat.pointer && !hasPointer) {
             seat.pointer.reset();

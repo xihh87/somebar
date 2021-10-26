@@ -22,6 +22,14 @@ union Arg {
 };
 struct Monitor;
 
+enum { ClkNone, ClkTagBar, ClkLayoutSymbol, ClkWinTitle, ClkStatusText };
+struct Button {
+	int control;
+	int btn; // <linux/input-event-codes.h>
+	void (*func)(Monitor &mon, const Arg &arg);
+	const Arg arg;
+};
+
 extern wl_display *display;
 extern wl_compositor *compositor;
 extern wl_shm *shm;
@@ -32,15 +40,6 @@ extern std::vector<QString> layoutNames;
 void toggleview(Monitor &m, const Arg &arg);
 void view(Monitor &m, const Arg &arg);
 void setlayout(Monitor &m, const Arg &arg);
-
-enum class Control { None, TagBar, LayoutSymbol, WinTitle, StatusText };
-struct Button {
-	Control control;
-	unsigned int modifiers; // todo xkbcommon
-	int btn; // <linux/input-event-codes.h>
-	void (*func)(Monitor &mon, const Arg &arg);
-	const Arg arg;
-};
 
 // wayland smart pointers
 template<typename T>
