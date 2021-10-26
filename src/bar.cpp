@@ -135,7 +135,6 @@ void Bar::render()
     renderText(layoutNames[_layout]);
     _titleX = _x;
     renderText(_title);
-    _statusX = _x;
     renderStatus();
     
     _painter = nullptr;
@@ -184,8 +183,8 @@ void Bar::renderStatus()
 {
     _painter->fillRect(_x, 0, _bufs->width-_x, _bufs->height, _painter->brush());
     auto size = textWidth(_status) + paddingX;
-    _x = _bufs->width - size;
-    _painter->drawText(paddingX+_x, _textY, _status);
+    _statusX = _bufs->width - size;
+    _painter->drawText(paddingX+_statusX, _textY, _status);
     _x = _bufs->width;
 }
 

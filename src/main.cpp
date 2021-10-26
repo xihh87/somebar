@@ -90,6 +90,17 @@ void toggletag(Monitor &m, const Arg &arg)
 {
     znet_tapesoftware_dwl_wm_monitor_v1_set_client_tags(m.dwlMonitor.get(), 0xffffff, arg.ui);
 }
+void spawn(Monitor&, const Arg &arg)
+{
+    if (fork()) {
+        auto argv = static_cast<char* const*>(arg.v);
+        setsid();
+        execvp(argv[0], argv);
+        fprintf(stderr, "somebar: execvp %s ", argv[0]);
+        perror(" failed");
+        exit(1);
+    }
+}
 
 static const struct xdg_wm_base_listener xdgWmBaseListener = {
     [](void*, xdg_wm_base *sender, uint32_t serial) {

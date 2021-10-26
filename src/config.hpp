@@ -15,6 +15,7 @@ constexpr bool fontBold = false;
 
 constexpr ColorScheme colorInactive = {QColor(0xbb, 0xbb, 0xbb), QColor(0x22, 0x22, 0x22)};
 constexpr ColorScheme colorActive = {QColor(0xee, 0xee, 0xee), QColor(0x00, 0x55, 0x77)};
+constexpr const char *termcmd[] = {"foot", nullptr};
 
 constexpr Button buttons[] = {
     { ClkTagBar,       BTN_LEFT,   toggleview, {0} },
@@ -23,4 +24,5 @@ constexpr Button buttons[] = {
     { ClkTagBar,       BTN_MIDDLE, toggletag,  {0} },
     { ClkLayoutSymbol, BTN_LEFT,   setlayout,  {.ui = 0} },
     { ClkLayoutSymbol, BTN_RIGHT,  setlayout,  {.ui = 2} },
+    { ClkWinTitle,     BTN_RIGHT,  spawn,      {.v = termcmd} },
 };

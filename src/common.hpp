@@ -15,9 +15,7 @@ struct ColorScheme {
     QColor fg, bg;
 };
 union Arg {
-	int i;
 	unsigned int ui;
-	float f;
 	const void *v;
 };
 struct Monitor;
@@ -42,6 +40,7 @@ void toggleview(Monitor &m, const Arg &arg);
 void setlayout(Monitor &m, const Arg &arg);
 void tag(Monitor &m, const Arg &arg);
 void toggletag(Monitor &m, const Arg &arg);
+void spawn(Monitor&, const Arg &arg);
 
 // wayland smart pointers
 template<typename T>
