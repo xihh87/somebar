@@ -37,9 +37,11 @@ extern zwlr_layer_shell_v1 *wlrLayerShell;
 extern std::vector<QString> tagNames;
 extern std::vector<QString> layoutNames;
 
-void toggleview(Monitor &m, const Arg &arg);
 void view(Monitor &m, const Arg &arg);
+void toggleview(Monitor &m, const Arg &arg);
 void setlayout(Monitor &m, const Arg &arg);
+void tag(Monitor &m, const Arg &arg);
+void toggletag(Monitor &m, const Arg &arg);
 
 // wayland smart pointers
 template<typename T>

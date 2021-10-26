@@ -146,10 +146,10 @@ void Bar::render()
     _invalid = false;
 }
 
-void Bar::setColorScheme(const ColorScheme &scheme)
+void Bar::setColorScheme(const ColorScheme &scheme, bool invert)
 {
-    _painter->setBrush(QBrush {scheme.bg});
-    _painter->setPen(QPen {QBrush {scheme.fg}, 1});
+    _painter->setBrush(QBrush {invert ? scheme.fg : scheme.bg});
+    _painter->setPen(QPen {QBrush {invert ? scheme.bg : scheme.fg}, 1});
 }
 
 void Bar::renderTags()
@@ -157,8 +157,9 @@ void Bar::renderTags()
     for (auto i=0u; i<_tags.size(); i++) {
         auto& tag = _tags[i];
         tag.x = _x;
-        setColorScheme(tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT ? colorUrgent
-            : tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE ? colorActive : colorInactive);
+        setColorScheme(
+            tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE ? colorActive : colorInactive,
+            tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT);
         renderText(tagNames[i]);
         auto indicators = qMin(tag.numClients, _bufs->height/2);
         for (auto ind = 0; ind < indicators; ind++) {

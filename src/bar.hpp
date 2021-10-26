@@ -45,7 +45,7 @@ class Bar {
     void renderStatus();
     void renderText(const QString &text);
     int textWidth(const QString &text);
-    void setColorScheme(const ColorScheme &scheme);
+    void setColorScheme(const ColorScheme &scheme, bool invert=false);
 public:
     Bar(Monitor *mon);
     const wl_surface* surface() const;

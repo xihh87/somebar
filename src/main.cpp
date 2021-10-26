@@ -70,17 +70,25 @@ static int statusFifoWriter {-1};
 static QSocketNotifier *displayWriteNotifier;
 static bool quitting {false};
 
-void toggleview(Monitor &m, const Arg &arg)
-{
-    znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), arg.ui, 0);
-}
 void view(Monitor &m, const Arg &arg)
 {
     znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), arg.ui, 1);
 }
+void toggleview(Monitor &m, const Arg &arg)
+{
+    znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), arg.ui, 0);
+}
 void setlayout(Monitor &m, const Arg &arg)
 {
     znet_tapesoftware_dwl_wm_monitor_v1_set_layout(m.dwlMonitor.get(), arg.ui);
+}
+void tag(Monitor &m, const Arg &arg)
+{
+    znet_tapesoftware_dwl_wm_monitor_v1_set_client_tags(m.dwlMonitor.get(), 0, arg.ui);
+}
+void toggletag(Monitor &m, const Arg &arg)
+{
+    znet_tapesoftware_dwl_wm_monitor_v1_set_client_tags(m.dwlMonitor.get(), 0xffffff, arg.ui);
 }
 
 static const struct xdg_wm_base_listener xdgWmBaseListener = {

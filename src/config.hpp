@@ -15,12 +15,12 @@ constexpr bool fontBold = false;
 
 constexpr ColorScheme colorInactive = {QColor(0xbb, 0xbb, 0xbb), QColor(0x22, 0x22, 0x22)};
 constexpr ColorScheme colorActive = {QColor(0xee, 0xee, 0xee), QColor(0x00, 0x55, 0x77)};
-constexpr ColorScheme colorUrgent = {colorActive.bg, colorActive.fg};
 
 constexpr Button buttons[] = {
     { ClkTagBar,       BTN_LEFT,   toggleview, {0} },
     { ClkTagBar,       BTN_LEFT,   view,       {0} },
-    //{ Clk::TagBar, 0, BTN_RIGHT, tag, {0} },
+    { ClkTagBar,       BTN_RIGHT,  tag,        {0} },
+    { ClkTagBar,       BTN_MIDDLE, toggletag,  {0} },
     { ClkLayoutSymbol, BTN_LEFT,   setlayout,  {.ui = 0} },
     { ClkLayoutSymbol, BTN_RIGHT,  setlayout,  {.ui = 2} },
 };

@@ -111,6 +111,15 @@
             <arg name="toggle_tagset" type="uint"/>
         </request>
 
+        <request name="set_client_tags">
+            <description summary="updates the tags of the focused client. changes are applied immediately.">
+                tags are updated as follows:
+                new_tags = (current_tags AND and_tags) XOR xor_tags
+            </description>
+            <arg name="and_tags" type="uint"/>
+            <arg name="xor_tags" type="uint"/>
+        </request>
+
         <request name="set_layout">
             <description summary="sets the active layout on this monitor. changes are applied immediately.">
             </description>
