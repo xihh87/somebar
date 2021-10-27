@@ -1,4 +1,4 @@
-# somebar - dwl-like bar for dwm
+# somebar - dwm-like bar for dwl
 
 ![Screenshot](screenshot.png)
 
@@ -56,7 +56,7 @@ for shell scripts, as there is no race-free way to write to a file only if it ex
 
 ## License
 
-somebar - dwl-like bar for dwm  
+somebar - dwm-like bar for dwl  
 Copyright (c) 2021 Raphael Robatsch
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
