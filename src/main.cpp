@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <math.h>
 #include <signal.h>
+#include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/signalfd.h>
 #include <sys/stat.h>
@@ -14,10 +15,10 @@
 #include <list>
 #include <optional>
 #include <vector>
-#include <QGuiApplication>
-#include <QSocketNotifier>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
+#include <QGuiApplication>
+#include <QString>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
@@ -44,10 +45,11 @@ struct Seat {
 };
 
 static void waylandFlush();
-static void waylandWriteReady();
 static void requireGlobal(const void *p, const char *name);
 static void setupStatusFifo();
 static void onStatus();
+[[noreturn]] static void diesys(const char *why);
+[[noreturn]] static void die(const char *why);
 static void cleanup();
 
 wl_display *display;
@@ -65,9 +67,10 @@ static std::list<Monitor> monitors;
 static std::list<Seat> seats;
 static QString lastStatus;
 static std::string statusFifoName;
+static int epoll {-1};
+static int displayFd {-1};
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
-static QSocketNotifier *displayWriteNotifier;
 static bool quitting {false};
 
 void view(Monitor &m, const Arg &arg)
@@ -245,28 +248,27 @@ static void setupStatusFifo()
         auto result = mkfifo(path.c_str(), 0666);
         if (result == 0) {
             auto fd = open(path.c_str(), O_CLOEXEC | O_NONBLOCK | O_RDONLY);
-            if (fd == -1) {
-                perror("open status fifo reader");
-                cleanup();
-                exit(1);
+            if (fd < 0) {
+                diesys("open status fifo reader");
             }
             statusFifoName = path;
             statusFifoFd = fd;
 
             fd = open(path.c_str(), O_CLOEXEC | O_WRONLY);
-            if (fd == -1) {
-                perror("open status fifo writer");
-                cleanup();
-                exit(1);
+            if (fd < 0) {
+                diesys("open status fifo writer");
             }
             statusFifoWriter = fd;
 
-            auto statusNotifier = new QSocketNotifier(statusFifoFd, QSocketNotifier::Read);
-            statusNotifier->setEnabled(true);
-            QObject::connect(statusNotifier, &QSocketNotifier::activated, onStatus);
+            epoll_event ev = {0};
+            ev.events = EPOLLIN;
+            ev.data.fd = statusFifoFd;
+            if (epoll_ctl(epoll, EPOLL_CTL_ADD, statusFifoFd, &ev) < 0) {
+                diesys("epoll_ctl add status fifo");
+            }
             return;
         } else if (errno != EEXIST) {
-            perror("mkfifo");
+            diesys("mkfifo");
         }
     }
 }
@@ -341,50 +343,85 @@ int main(int argc, char **argv)
     sigaddset(&blockedsigs, SIGTERM);
     sigprocmask(SIG_BLOCK, &blockedsigs, nullptr);
 
-    QGuiApplication app(argc, argv);
-    QCoreApplication::setOrganizationName("tape software");
-    QCoreApplication::setOrganizationDomain("tapesoftware.net");
-    QCoreApplication::setApplicationName("somebar");
+    QGuiApplication app {argc, argv};
 
+    epoll_event epollEv = {0};
+    std::array<epoll_event, 5> epollEvents;
+    epoll = epoll_create1(EPOLL_CLOEXEC);
+    if (epoll < 0) {
+        diesys("epoll_create1");
+    }
     int sfd = signalfd(-1, &blockedsigs, SFD_CLOEXEC | SFD_NONBLOCK);
     if (sfd < 0) {
-        perror("signalfd");
-        cleanup();
-        exit(1);
+        diesys("signalfd");
     }
-    QSocketNotifier signalNotifier {sfd, QSocketNotifier::Read};
-    QObject::connect(&signalNotifier, &QSocketNotifier::activated, []() { quitting = true; });
+    epollEv.events = EPOLLIN;
+    epollEv.data.fd = sfd;
+    if (epoll_ctl(epoll, EPOLL_CTL_ADD, sfd, &epollEv) < 0) {
+        diesys("epoll_ctl add signalfd");
+    }
 
-    display = wl_display_connect(NULL);
+    display = wl_display_connect(nullptr);
     if (!display) {
-        fprintf(stderr, "Failed to connect to Wayland display\n");
-        return 1;
+        die("Failed to connect to Wayland display");
     }
+    displayFd = wl_display_get_fd(display);
 
     auto registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, nullptr);
     wl_display_roundtrip(display);
     onReady();
 
-    QSocketNotifier displayReadNotifier(wl_display_get_fd(display), QSocketNotifier::Read);
-    displayReadNotifier.setEnabled(true);
-    QObject::connect(&displayReadNotifier, &QSocketNotifier::activated, [=]() {
-        auto res = wl_display_dispatch(display);
-        if (res < 0) {
-            perror("wl_display_dispatch");
-            cleanup();
-            exit(1);
-        }
-    });
-    displayWriteNotifier = new QSocketNotifier(wl_display_get_fd(display), QSocketNotifier::Write);
-    displayWriteNotifier->setEnabled(false);
-    QObject::connect(displayWriteNotifier, &QSocketNotifier::activated, waylandWriteReady);
+    epollEv.events = EPOLLIN;
+    epollEv.data.fd = displayFd;
+    if (epoll_ctl(epoll, EPOLL_CTL_ADD, displayFd, &epollEv) < 0) {
+        diesys("epoll_ctl add wayland_display");
+    }
 
     while (!quitting) {
         waylandFlush();
-        app.processEvents(QEventLoop::WaitForMoreEvents);
+        auto res = epoll_wait(epoll, epollEvents.data(), epollEvents.size(), -1);
+        if (res < 0) {
+            if (errno != EINTR) {
+                diesys("epoll_wait");
+            }
+        } else {
+            for (auto i=0; i<res; i++) {
+                auto &ev = epollEvents[i];
+                if (ev.data.fd == displayFd) {
+                    if (ev.events & EPOLLIN) {
+                        if (wl_display_dispatch(display) < 0) {
+                            die("wl_display_dispatch");
+                        }
+                    } if (ev.events & EPOLLOUT) {
+                        epollEv.events = EPOLLIN;
+                        epollEv.data.fd = displayFd;
+                        if (epoll_ctl(epoll, EPOLL_CTL_MOD, displayFd, &epollEv) < 0) {
+                            diesys("epoll_ctl");
+                        }
+                        waylandFlush();
+                    }
+                } else if (ev.data.fd == statusFifoFd) {
+                    onStatus();
+                } else if (ev.data.fd == sfd) {
+                    quitting = true;
+                }
+            }
+        }
     }
     cleanup();
+}
+
+void die(const char *why) {
+    fprintf(stderr, "%s\n", why);
+    cleanup();
+    exit(1);
+}
+
+void diesys(const char *why) {
+    perror(why);
+    cleanup();
+    exit(1);
 }
 
 void cleanup() {
@@ -397,14 +434,15 @@ void waylandFlush()
 {
     wl_display_dispatch_pending(display);
     if (wl_display_flush(display) < 0 && errno == EAGAIN) {
-        displayWriteNotifier->setEnabled(true);
+        epoll_event ev = {0};
+        ev.events = EPOLLIN | EPOLLOUT;
+        ev.data.fd = displayFd;
+        if (epoll_ctl(epoll, EPOLL_CTL_MOD, displayFd, &ev) < 0) {
+            diesys("epoll_ctl");
+        }
     }
 }
-static void waylandWriteReady() 
-{
-    displayWriteNotifier->setEnabled(false);
-    waylandFlush();
-}
+
 static void requireGlobal(const void *p, const char *name)
 {
     if (p) return;
