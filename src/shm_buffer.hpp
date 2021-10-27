@@ -3,8 +3,27 @@
 
 #pragma once
 #include <array>
+#include <sys/mman.h>
 #include <wayland-client.h>
 #include "common.hpp"
+
+class MemoryMapping {
+    void* _ptr {nullptr};
+    size_t _size {0};
+public:
+    MemoryMapping() { }
+    explicit MemoryMapping(void *ptr, size_t size) : _ptr(ptr), _size(size) { }
+    MemoryMapping(const MemoryMapping&) = delete;
+    MemoryMapping(MemoryMapping &&other) { swap(other); }
+    MemoryMapping& operator=(const MemoryMapping &other) = delete;
+    MemoryMapping& operator=(MemoryMapping &&other) { swap(other); return *this; }
+    ~MemoryMapping() { if (_ptr) munmap(_ptr, _size); }
+    void swap(MemoryMapping &other) {
+        using std::swap;
+        swap(_ptr, other._ptr);
+        swap(_size, other._size);
+    }
+};
 
 // double buffered shm
 // format is must be 32-bit
@@ -15,18 +34,12 @@ class ShmBuffer {
     };
     std::array<Buf, 2> _buffers;
     int _current {0};
-    size_t _totalSize {0};
+    MemoryMapping _mapping;
 public:
     int width, height, stride;
 
     explicit ShmBuffer(int width, int height, wl_shm_format format);
-    ShmBuffer(const ShmBuffer&) = delete;
-    ShmBuffer(ShmBuffer&&) = default;
-    ShmBuffer& operator=(const ShmBuffer&) = delete;
-    ShmBuffer& operator=(ShmBuffer&&) = default;
-    ~ShmBuffer();
-
-    uint8_t* data() const;
-    wl_buffer* buffer() const;
+    uint8_t* data();
+    wl_buffer* buffer();
     void flip();
 };

@@ -13,12 +13,13 @@ ShmBuffer::ShmBuffer(int w, int h, wl_shm_format format)
     , height(h)
     , stride(w*4)
 {
-    auto oneSize = stride*h;
-    _totalSize = oneSize * n;
+    auto oneSize = stride*size_t(h);
+    auto totalSize = oneSize * n;
     auto fd = memfd_create("wl_shm", MFD_CLOEXEC);
-    ftruncate(fd, _totalSize);
-    auto pool = wl_shm_create_pool(shm, fd, _totalSize);
-    auto ptr = reinterpret_cast<uint8_t*>(mmap(nullptr, _totalSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+    ftruncate(fd, totalSize);
+    auto pool = wl_shm_create_pool(shm, fd, totalSize);
+    auto ptr = reinterpret_cast<uint8_t*>(mmap(nullptr, totalSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+    _mapping = MemoryMapping {ptr, totalSize};
     close(fd);
     for (auto i=0; i<n; i++) {
         auto offset = oneSize*i;
@@ -30,13 +31,6 @@ ShmBuffer::ShmBuffer(int w, int h, wl_shm_format format)
     wl_shm_pool_destroy(pool);
 }
 
-ShmBuffer::~ShmBuffer()
-{
-    if (_buffers[0].data) {
-        munmap(_buffers[0].data, _totalSize);
-    }
-}
-
-uint8_t* ShmBuffer::data() const { return _buffers[_current].data; }
-wl_buffer* ShmBuffer::buffer() const { return _buffers[_current].buffer.get(); }
+uint8_t* ShmBuffer::data() { return _buffers[_current].data; }
+wl_buffer* ShmBuffer::buffer() { return _buffers[_current].buffer.get(); }
 void ShmBuffer::flip() { _current = 1-_current; }

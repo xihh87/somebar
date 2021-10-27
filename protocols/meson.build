@@ -11,15 +11,12 @@ wayland_scanner_client = generator(
   output: '@BASENAME@-client-protocol.h',
   arguments: ['client-header', '@INPUT@', '@OUTPUT@'])
 
+wayland_xmls = [
+  wl_protocol_dir + '/stable/xdg-shell/xdg-shell.xml',
+  'wlr-layer-shell-unstable-v1.xml',
+  'net-tapesoftware-dwl-wm-unstable-v1.xml',
+]
 wayland_sources = [
-  wayland_scanner_code.process(
-    wl_protocol_dir + '/stable/xdg-shell/xdg-shell.xml',
-    'wlr-layer-shell-unstable-v1.xml',
-    'net-tapesoftware-dwl-wm-unstable-v1.xml'
-    ),
-  wayland_scanner_client.process(
-    wl_protocol_dir + '/stable/xdg-shell/xdg-shell.xml',
-    'wlr-layer-shell-unstable-v1.xml',
-    'net-tapesoftware-dwl-wm-unstable-v1.xml'
-    ),
-  ]
+  wayland_scanner_code.process(wayland_xmls),
+  wayland_scanner_client.process(wayland_xmls),
+]
