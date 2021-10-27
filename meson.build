@@ -25,4 +25,5 @@ executable('somebar',
     pango_dep,
     pangocairo_dep,
   ],
+  install: true,
   cpp_args: '-DSOMEBAR_VERSION="@0@"'.format(meson.project_version()))
