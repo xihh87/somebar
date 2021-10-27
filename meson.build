@@ -1,5 +1,9 @@
 project('somebar', ['c', 'cpp'],
-  default_options: ['cpp_std=c++17', 'cpp_args=-Wno-parentheses'])
+  version: '0.1.0',
+  default_options: [
+    'cpp_std=c++17',
+    'cpp_args=-Wno-parentheses',
+  ])
 
 wayland_dep = dependency('wayland-client')
 wayland_cursor_dep = dependency('wayland-cursor')
@@ -20,4 +24,5 @@ executable('somebar',
     cairo_dep,
     pango_dep,
     pangocairo_dep,
-  ])
+  ],
+  cpp_args: '-DSOMEBAR_VERSION="@0@"'.format(meson.project_version()))

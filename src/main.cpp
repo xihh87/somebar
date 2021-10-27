@@ -24,6 +24,7 @@
 #include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
 #include "common.hpp"
 #include "bar.hpp"
+#include "line_buffer.hpp"
 
 struct Monitor {
     uint32_t registryName;
@@ -101,7 +102,7 @@ void toggletag(Monitor &m, const Arg &arg)
 }
 void spawn(Monitor&, const Arg &arg)
 {
-    if (fork()) {
+    if (fork() == 0) {
         auto argv = static_cast<char* const*>(arg.v);
         setsid();
         execvp(argv[0], argv);
@@ -334,29 +335,31 @@ static void updateVisibility(const std::string &name, T updater)
     }
 }
 
+static LineBuffer<512> _statusBuffer;
 static void onStatus()
 {
-    // this doesn't handle cases where there's multiple or partial lines in the buffer
-    char buffer[512];
-    auto n = read(statusFifoFd, buffer, sizeof(buffer));
-    auto str = std::string {buffer, (unsigned long) n};
-    auto trailer = str.rfind('\n');
-    if (trailer != std::string::npos) str.erase(trailer);
-    if (str.rfind(prefixStatus, 0) == 0) {
-        lastStatus = str.substr(prefixStatus.size());
-        for (auto &monitor : monitors) {
-            if (monitor.bar) {
-                monitor.bar->setStatus(lastStatus);
-                monitor.bar->invalidate();
+    _statusBuffer.readLines(
+        [](void *p, size_t size) {
+            return read(statusFifoFd, p, size);
+        },
+        [](const char *buffer, size_t n) {
+            auto str = std::string {buffer, n};
+            if (str.rfind(prefixStatus, 0) == 0) {
+                lastStatus = str.substr(prefixStatus.size());
+                for (auto &monitor : monitors) {
+                    if (monitor.bar) {
+                        monitor.bar->setStatus(lastStatus);
+                        monitor.bar->invalidate();
+                    }
+                }
+            } else if (str.rfind(prefixShow, 0) == 0) {
+                updateVisibility(str.substr(prefixShow.size()), [](bool) { return true; });
+            } else if (str.rfind(prefixHide, 0) == 0) {
+                updateVisibility(str.substr(prefixHide.size()), [](bool) { return false; });
+            } else if (str.rfind(prefixToggle, 0) == 0) {
+                updateVisibility(str.substr(prefixToggle.size()), [](bool vis) { return !vis; });
             }
-        }
-    } else if (str.rfind(prefixShow, 0) == 0) {
-        updateVisibility(str.substr(prefixShow.size()), [](bool) { return true; });
-    } else if (str.rfind(prefixHide, 0) == 0) {
-        updateVisibility(str.substr(prefixHide.size()), [](bool) { return false; });
-    } else if (str.rfind(prefixToggle, 0) == 0) {
-        updateVisibility(str.substr(prefixToggle.size()), [](bool vis) { return !vis; });
-    }
+        });
 }
 
 struct HandleGlobalHelper {
@@ -411,6 +414,41 @@ static const struct wl_registry_listener registry_listener = {
 
 int main(int argc, char **argv)
 {
+    int opt;
+    while ((opt = getopt(argc, argv, "chv")) != -1) {
+        switch (opt) {
+            case 'h':
+                printf("Usage: %s [-h] [-v] [-c command]\n", argv[0]);
+                printf("  -h: Show this help\n");
+                printf("  -v: Show somebar version\n");
+                printf("  -c: Sends a command to sombar. See README for details.\n");
+                printf("If any of these are specified, somebar exits after the action.\n");
+                printf("Otherwise, somebar will display itself.\n");
+                exit(0);
+            case 'v':
+                printf("somebar " SOMEBAR_VERSION "\n");
+                exit(0);
+            case 'c':
+                if (optind >= argc) {
+                    die("Expected command");
+                }
+                auto path = std::string {getenv("XDG_RUNTIME_DIR")} + "/somebar-0";
+                int fd = open(path.c_str(), O_WRONLY | O_CLOEXEC);
+                if (fd < 0) {
+                    fprintf(stderr, "could not open %s: ", path.c_str());
+                    perror("");
+                    exit(1);
+                }
+                auto str = std::string {};
+                for (auto i = optind; i<argc; i++) {
+                    if (i > optind) str += " ";
+                    str += argv[i];
+                }
+                str += "\n";
+                write(fd, str.c_str(), str.size());
+                exit(0);
+        }
+    }
     static sigset_t blockedsigs;
     sigemptyset(&blockedsigs);
     sigaddset(&blockedsigs, SIGINT);
@@ -506,6 +544,7 @@ void waylandFlush()
 }
 
 void die(const char *why) {
+    fprintf(stderr, "%s\n", why);
     cleanup();
     exit(1);
 }

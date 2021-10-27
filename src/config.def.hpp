@@ -22,5 +22,5 @@ constexpr Button buttons[] = {
     { ClkTagBar,       BTN_MIDDLE, toggletag,  {0} },
     { ClkLayoutSymbol, BTN_LEFT,   setlayout,  {.ui = 0} },
     { ClkLayoutSymbol, BTN_RIGHT,  setlayout,  {.ui = 2} },
-    { ClkWinTitle,     BTN_RIGHT,  spawn,      {.v = termcmd} },
+    { ClkStatusText,   BTN_RIGHT,  spawn,      {.v = termcmd} },
 };
