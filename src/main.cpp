@@ -19,17 +19,20 @@
 #include <wayland-client.h>
 #include <wayland-cursor.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
 #include "common.hpp"
 #include "bar.hpp"
 
 struct Monitor {
-    uint32_t name;
+    uint32_t registryName;
+    std::string xdgName;
     wl_unique_ptr<wl_output> wlOutput;
     wl_unique_ptr<znet_tapesoftware_dwl_wm_monitor_v1> dwlMonitor;
     std::optional<Bar> bar;
 };
+
 struct SeatPointer {
     wl_unique_ptr<wl_pointer> wlPointer;
     Bar *focusedBar;
@@ -58,6 +61,7 @@ znet_tapesoftware_dwl_wm_v1 *dwlWm;
 std::vector<std::string> tagNames;
 std::vector<std::string> layoutNames;
 static xdg_wm_base *xdgWmBase;
+static zxdg_output_manager_v1 *xdgOutputManager;
 static wl_surface *cursorSurface;
 static wl_cursor_image *cursorImage;
 static bool ready;
@@ -70,6 +74,10 @@ static int displayFd {-1};
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
 static bool quitting {false};
+
+// Intentionally not inside Monitor, so we can preemptively manage the
+// visibility of bars on future outputs.
+static std::unordered_map<std::string, bool> barVisibility;
 
 void view(Monitor &m, const Arg &arg)
 {
@@ -107,6 +115,18 @@ static const struct xdg_wm_base_listener xdgWmBaseListener = {
     [](void*, xdg_wm_base *sender, uint32_t serial) {
         xdg_wm_base_pong(sender, serial);
     }
+};
+
+static const struct zxdg_output_v1_listener xdgOutputListener = {
+    .logical_position = [](void*, zxdg_output_v1*, int, int) { },
+    .logical_size = [](void*, zxdg_output_v1*, int, int) { },
+    .done = [](void*, zxdg_output_v1*) { },
+    .name = [](void *mp, zxdg_output_v1 *xdgOutput, const char *name) {
+        auto& monitor = *static_cast<Monitor*>(mp);
+        monitor.xdgName = name;
+        zxdg_output_v1_destroy(xdgOutput);
+    },
+    .description = [](void*, zxdg_output_v1*, const char*) { },
 };
 
 static Bar* barFromSurface(const wl_surface *surface)
@@ -221,6 +241,8 @@ static void setupMonitor(Monitor &monitor) {
     monitor.bar.emplace(&monitor);
     monitor.bar->setStatus(lastStatus);
     znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
+    auto xdgOutput = zxdg_output_manager_v1_get_xdg_output(xdgOutputManager, monitor.wlOutput.get());
+    zxdg_output_v1_add_listener(xdgOutput, &xdgOutputListener, &monitor);
 }
 
 // called after we have received the initial batch of globals
@@ -229,6 +251,7 @@ static void onReady()
     requireGlobal(compositor, "wl_compositor");
     requireGlobal(shm, "wl_shm");
     requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
+    requireGlobal(xdgOutputManager, "zxdg_output_manager_v1");
     requireGlobal(dwlWm, "znet_tapesoftware_dwl_wm_v1");
     setupStatusFifo();
     wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
@@ -270,16 +293,39 @@ static void setupStatusFifo()
     }
 }
 
+const std::string prefixStatus = "status ";
+const std::string prefixShow = "show ";
+const std::string prefixHide = "hide ";
+const std::string prefixToggle = "toggle ";
+const std::string argAll = "all";
+const std::string argCurrent = "current";
+
+template<typename T>
+static void updateVisibility(const std::string &name, T updater)
+{
+    auto isCurrent = name == argCurrent;
+    auto isAll = name == argAll;
+}
+
 static void onStatus()
 {
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
-    lastStatus = {buffer, (unsigned long) n};
-    for (auto &monitor : monitors) {
-        if (monitor.bar) {
-            monitor.bar->setStatus(lastStatus);
-            monitor.bar->invalidate();
+    auto str = std::string {buffer, (unsigned long) n};
+    if (str.rfind(prefixStatus, 0) == 0) {
+        lastStatus = str.substr(prefixStatus.size());
+        for (auto &monitor : monitors) {
+            if (monitor.bar) {
+                monitor.bar->setStatus(lastStatus);
+                monitor.bar->invalidate();
+            }
         }
+    } else if (str.rfind(prefixShow, 0) == 0) {
+        updateVisibility(str.substr(prefixShow.size()), [](bool) { return true; });
+    } else if (str.rfind(prefixHide, 0) == 0) {
+        updateVisibility(str.substr(prefixHide.size()), [](bool) { return false; });
+    } else if (str.rfind(prefixToggle, 0) == 0) {
+        updateVisibility(str.substr(prefixToggle.size()), [](bool vis) { return !vis; });
     }
 }
 
@@ -301,6 +347,7 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
     if (reg.handle(compositor, wl_compositor_interface, 4)) return;
     if (reg.handle(shm, wl_shm_interface, 1)) return;
     if (reg.handle(wlrLayerShell, zwlr_layer_shell_v1_interface, 4)) return;
+    if (reg.handle(xdgOutputManager, zxdg_output_manager_v1_interface, 3)) return;
     if (reg.handle(xdgWmBase, xdg_wm_base_interface, 2)) {
         xdg_wm_base_add_listener(xdgWmBase, &xdgWmBaseListener, nullptr);
         return;
@@ -315,7 +362,7 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
         return;
     }
     if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
-        auto& m = monitors.emplace_back(Monitor {name, wl_unique_ptr<wl_output> {output}});
+        auto& m = monitors.emplace_back(Monitor {name, {}, wl_unique_ptr<wl_output> {output}});
         if (ready) {
             setupMonitor(m);
         }
@@ -324,7 +371,7 @@ static void registryHandleGlobal(void*, wl_registry *registry, uint32_t name, co
 }
 static void registryHandleRemove(void*, wl_registry *registry, uint32_t name)
 {
-    monitors.remove_if([name](const Monitor &mon) { return mon.name == name; });
+    monitors.remove_if([name](const Monitor &mon) { return mon.registryName == name; });
     seats.remove_if([name](const Seat &seat) { return seat.name == name; });
 }
 static const struct wl_registry_listener registry_listener = {
