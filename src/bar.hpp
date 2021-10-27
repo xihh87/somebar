@@ -3,20 +3,29 @@
 
 #pragma once
 #include <optional>
+#include <string>
 #include <vector>
 #include <wayland-client.h>
-#include <QString>
-#include <QFontMetrics>
-#include <QPainter>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "common.hpp"
 #include "shm_buffer.hpp"
+
+class BarComponent {
+    std::unique_ptr<char[]> _text;
+public:
+    BarComponent();
+    explicit BarComponent(wl_unique_ptr<PangoLayout> layout);
+    int width() const;
+    void setText(const std::string &text);
+    wl_unique_ptr<PangoLayout> pangoLayout;
+    int x {0};
+};
 
 struct Tag {
     znet_tapesoftware_dwl_wm_monitor_v1_tag_state state;
     int numClients;
     int focusedClient;
-    int x;
+    BarComponent component;
 };
 
 struct Monitor;
@@ -26,35 +35,39 @@ class Bar {
 
     wl_unique_ptr<wl_surface> _surface;
     wl_unique_ptr<zwlr_layer_surface_v1> _layerSurface;
+    wl_unique_ptr<PangoContext> _pangoContext;
     Monitor *_mon;
-    QPainter *_painter {nullptr};
     std::optional<ShmBuffer> _bufs;
-    int _textY, _x;
-    int _statusX, _titleX, _layoutX;
+    std::vector<Tag> _tags;
+    BarComponent _layoutCmp, _titleCmp, _statusCmp;
+    bool _selected;
     bool _invalid {false};
 
-    std::vector<Tag> _tags;
-    int _layout;
-    bool _selected;
-    QString _title;
-    QString _status;
+    // only vaild during render()
+    cairo_t *_painter {nullptr};
+    int  _x;
+    ColorScheme _colorScheme;
 
     void layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height);
     void render();
     void renderTags();
     void renderStatus();
-    void renderText(const QString &text);
-    int textWidth(const QString &text);
+
+    // low-level rendering
     void setColorScheme(const ColorScheme &scheme, bool invert=false);
+    void beginFg();
+    void beginBg();
+    void renderComponent(BarComponent &component);
+    BarComponent createComponent(const std::string &initial = {});
 public:
     Bar(Monitor *mon);
     const wl_surface* surface() const;
     void create(wl_output *output);
-    void setSelected(bool selected);
     void setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient);
+    void setSelected(bool selected);
     void setLayout(int layout);
-    void setTitle(const char *title);
-    void setStatus(const QString &status);
+    void setTitle(const std::string &title);
+    void setStatus(const std::string &status);
     void invalidate();
     void click(int x, int y, int btn);
 };

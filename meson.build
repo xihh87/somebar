@@ -3,7 +3,9 @@ project('somebar', ['c', 'cpp'],
 
 wayland_dep = dependency('wayland-client')
 wayland_cursor_dep = dependency('wayland-cursor')
-qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
+cairo_dep = dependency('cairo')
+pango_dep = dependency('pango')
+pangocairo_dep = dependency('pangocairo')
 
 subdir('protocols')
 
@@ -12,4 +14,10 @@ executable('somebar',
   'src/shm_buffer.cpp',
   'src/bar.cpp',
   wayland_sources,
-  dependencies: [wayland_dep, wayland_cursor_dep, qt5_dep])
+  dependencies: [
+    wayland_dep,
+    wayland_cursor_dep,
+    cairo_dep,
+    pango_dep,
+    pangocairo_dep,
+  ])

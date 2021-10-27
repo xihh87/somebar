@@ -1,10 +1,14 @@
 // somebar - dwl bar
 // See LICENSE file for copyright and license details.
 
-#include <cstdio>
+#include <stdio.h>
 #include <fcntl.h>
 #include <math.h>
 #include <signal.h>
+#include <algorithm>
+#include <list>
+#include <optional>
+#include <vector>
 #include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/signalfd.h>
@@ -12,13 +16,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <linux/input-event-codes.h>
-#include <list>
-#include <optional>
-#include <vector>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
-#include <QGuiApplication>
-#include <QString>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
@@ -57,15 +56,15 @@ wl_compositor *compositor;
 wl_shm *shm;
 zwlr_layer_shell_v1 *wlrLayerShell;
 znet_tapesoftware_dwl_wm_v1 *dwlWm;
-std::vector<QString> tagNames;
-std::vector<QString> layoutNames;
+std::vector<std::string> tagNames;
+std::vector<std::string> layoutNames;
 static xdg_wm_base *xdgWmBase;
 static wl_surface *cursorSurface;
 static wl_cursor_image *cursorImage;
 static bool ready;
 static std::list<Monitor> monitors;
 static std::list<Seat> seats;
-static QString lastStatus;
+static std::string lastStatus;
 static std::string statusFifoName;
 static int epoll {-1};
 static int displayFd {-1};
@@ -277,7 +276,7 @@ static void onStatus()
 {
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
-    lastStatus = QString::fromUtf8(buffer, n);
+    lastStatus = {buffer, (unsigned long) n};
     for (auto &monitor : monitors) {
         if (monitor.bar) {
             monitor.bar->setStatus(lastStatus);
@@ -342,8 +341,6 @@ int main(int argc, char **argv)
     sigaddset(&blockedsigs, SIGINT);
     sigaddset(&blockedsigs, SIGTERM);
     sigprocmask(SIG_BLOCK, &blockedsigs, nullptr);
-
-    QGuiApplication app {argc, argv};
 
     epoll_event epollEv = {0};
     std::array<epoll_event, 5> epollEvents;

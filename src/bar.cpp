@@ -1,11 +1,14 @@
-// somebar - dwl bar
+// somebar - dwl barbar
 // See LICENSE file for copyright and license details.
 
-#include <QColor>
-#include <QImage>
-#include <QPainter>
+#include <wayland-client-protocol.h>
+#include <pango/pangocairo.h>
 #include "bar.hpp"
+#include "cairo.h"
 #include "config.hpp"
+#include "pango/pango-font.h"
+#include "pango/pango-fontmap.h"
+#include "pango/pango-layout.h"
 
 const zwlr_layer_surface_v1_listener Bar::_layerSurfaceListener = {
     [](void *owner, zwlr_layer_surface_v1*, uint32_t serial, uint32_t width, uint32_t height)
@@ -21,24 +24,59 @@ const wl_callback_listener Bar::_frameListener = {
     }
 };
 
-static QFont getFont()
+struct Font {
+    PangoFontDescription *description;
+    int height {0};
+};
+static Font getFont()
 {
-    QFont font {fontFamily, fontSizePt};
-    font.setBold(fontBold);
-    return font;
-}
-static QFont font = getFont();
-static QFontMetrics fontMetrics = QFontMetrics {font};
+    auto fontMap = pango_cairo_font_map_get_default();
+    auto fontDesc = pango_font_description_from_string(font);
+    auto tempContext = pango_font_map_create_context(fontMap);
+    auto font = pango_font_map_load_font(fontMap, tempContext, fontDesc);
+    auto metrics = pango_font_get_metrics(font, pango_language_get_default());
 
-const wl_surface* Bar::surface() const { return _surface.get(); }
+    auto res = Font {};
+    res.description = fontDesc;
+    res.height = PANGO_PIXELS(pango_font_metrics_get_height(metrics));
+
+    pango_font_metrics_unref(metrics);
+    g_object_unref(font);
+    g_object_unref(tempContext);
+    g_object_unref(fontMap);
+    return res;
+}
+static Font barfont = getFont();
+
+BarComponent::BarComponent() { }
+BarComponent::BarComponent(wl_unique_ptr<PangoLayout> layout) : pangoLayout {std::move(layout)} {}
+int BarComponent::width() const
+{
+    int w, h;
+    pango_layout_get_size(pangoLayout.get(), &w, &h);
+    return PANGO_PIXELS(w);
+}
+void BarComponent::setText(const std::string &text)
+{
+    auto chars = new char[text.size()];
+    text.copy(chars, text.size());
+    _text.reset(chars);
+    pango_layout_set_text(pangoLayout.get(), chars, text.size());
+}
 
 Bar::Bar(Monitor *mon)
 {
     _mon = mon;
+    _pangoContext.reset(pango_font_map_create_context(pango_cairo_font_map_get_default()));
     for (auto i=0u; i<tagNames.size(); i++) {
-        _tags.push_back({ ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, 0 });
+        _tags.push_back({ ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, createComponent(tagNames[i]) });
     }
+    _layoutCmp = createComponent();
+    _titleCmp = createComponent();
+    _statusCmp = createComponent();
 }
+
+const wl_surface* Bar::surface() const { return _surface.get(); }
 
 void Bar::create(wl_output *output)
 {
@@ -50,11 +88,31 @@ void Bar::create(wl_output *output)
     zwlr_layer_surface_v1_set_anchor(_layerSurface.get(),
         anchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
 
-    auto barSize = fontMetrics.ascent() + fontMetrics.descent() + paddingY * 2;
-    _textY = fontMetrics.ascent() + paddingY;
-
+    auto barSize = barfont.height + paddingY * 2;
     zwlr_layer_surface_v1_set_size(_layerSurface.get(), 0, barSize);
     zwlr_layer_surface_v1_set_exclusive_zone(_layerSurface.get(), barSize);
+    wl_surface_commit(_surface.get());
+}
+
+
+void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient)
+{
+    auto& t = _tags[tag];
+    t.state = state;
+    t.numClients = numClients;
+    t.focusedClient = focusedClient;
+}
+void Bar::setSelected(bool selected) { _selected = selected; }
+void Bar::setLayout(int layout) { _layoutCmp.setText(layoutNames[layout]); }
+void Bar::setTitle(const std::string &title) { _titleCmp.setText(title); }
+void Bar::setStatus(const std::string &status) { _statusCmp.setText(status); }
+
+void Bar::invalidate()
+{
+    if (_invalid) return;
+    _invalid = true;
+    auto frame = wl_surface_frame(_surface.get());
+    wl_callback_add_listener(frame, &_frameListener, this);
     wl_surface_commit(_surface.get());
 }
 
@@ -63,14 +121,14 @@ void Bar::click(int x, int, int btn)
     Arg arg = {0};
     Arg *argp = nullptr;
     int control = ClkNone;
-    if (x > _statusX) {
+    if (x > _statusCmp.x) {
         control = ClkStatusText;
-    } else if (x > _titleX) {
+    } else if (x > _titleCmp.x) {
         control = ClkWinTitle;
-    } else if (x > _layoutX) {
+    } else if (x > _layoutCmp.x) {
         control = ClkLayoutSymbol;
     } else for (auto tag = _tags.size()-1; tag >= 0; tag--) {
-        if (x > _tags[tag].x) {
+        if (x > _tags[tag].component.x) {
             control = ClkTagBar;
             arg.ui = 1<<tag;
             argp = &arg;
@@ -86,28 +144,6 @@ void Bar::click(int x, int, int btn)
     }
 }
 
-void Bar::invalidate()
-{
-    if (_invalid) return;
-    _invalid = true;
-    auto frame = wl_surface_frame(_surface.get());
-    wl_callback_add_listener(frame, &_frameListener, this);
-    wl_surface_commit(_surface.get());
-}
-
-void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient)
-{
-    auto& t = _tags[tag];
-    t.state = state;
-    t.numClients = numClients;
-    t.focusedClient = focusedClient;
-}
-
-void Bar::setSelected(bool selected) { _selected = selected; }
-void Bar::setLayout(int layout) { _layout = layout; }
-void Bar::setTitle(const char *title) { _title = title; }
-void Bar::setStatus(const QString &status) { _status = status; }
-
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
 {
     zwlr_layer_surface_v1_ack_configure(_layerSurface.get(), serial);
@@ -117,24 +153,22 @@ void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height
 
 void Bar::render()
 {
-    auto img = QImage {
+    auto img = wl_unique_ptr<cairo_surface_t> {cairo_image_surface_create_for_data(
         _bufs->data(),
+        CAIRO_FORMAT_ARGB32,
         _bufs->width,
         _bufs->height,
-        _bufs->stride,
-        QImage::Format_ARGB32
-    };
-    auto painter = QPainter {&img};
-    _painter = &painter;
+        _bufs->stride
+    )};
+    auto painter = wl_unique_ptr<cairo_t> {cairo_create(img.get())};
+    _painter = painter.get();
+    pango_cairo_update_context(_painter, _pangoContext.get());
     _x = 0;
-    painter.setFont(font);
 
     renderTags();
     setColorScheme(_selected ? colorActive : colorInactive);
-    _layoutX = _x;
-    renderText(layoutNames[_layout]);
-    _titleX = _x;
-    renderText(_title);
+    renderComponent(_layoutCmp);
+    renderComponent(_titleCmp);
     renderStatus();
     
     _painter = nullptr;
@@ -145,50 +179,68 @@ void Bar::render()
     _invalid = false;
 }
 
-void Bar::setColorScheme(const ColorScheme &scheme, bool invert)
-{
-    _painter->setBrush(QBrush {invert ? scheme.fg : scheme.bg});
-    _painter->setPen(QPen {QBrush {invert ? scheme.bg : scheme.fg}, 1});
-}
-
 void Bar::renderTags()
 {
-    for (auto i=0u; i<_tags.size(); i++) {
-        auto& tag = _tags[i];
-        tag.x = _x;
+    for (auto &tag : _tags) {
         setColorScheme(
             tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE ? colorActive : colorInactive,
             tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT);
-        renderText(tagNames[i]);
-        auto indicators = qMin(tag.numClients, _bufs->height/2);
+        renderComponent(tag.component);
+        auto indicators = std::min(tag.numClients, _bufs->height/2);
         for (auto ind = 0; ind < indicators; ind++) {
-            if (ind == tag.focusedClient) {
-                _painter->drawLine(tag.x, ind*2, tag.x+5, ind*2);
-            } else {
-                _painter->drawPoint(tag.x, ind*2);
-            }
+            auto w = ind == tag.focusedClient ? 7 : 1;
+            cairo_move_to(_painter, tag.component.x, ind*2+0.5);
+            cairo_rel_line_to(_painter, w, 0);
+            cairo_close_path(_painter);
+            cairo_set_line_width(_painter, 1);
+            cairo_stroke(_painter);
         }
     }
 }
 
-void Bar::renderText(const QString &text)
+void Bar::renderStatus()
 {
-    auto size = textWidth(text) + paddingX*2;
-    _painter->fillRect(_x, 0, size, _bufs->height, _painter->brush());
-    _painter->drawText(paddingX+_x, _textY, text);
+    pango_cairo_update_layout(_painter, _statusCmp.pangoLayout.get());
+    beginBg();
+    auto start = _bufs->width - _statusCmp.width() - paddingX*2;
+    cairo_rectangle(_painter, _x, 0, _bufs->width-_x+start, _bufs->height);
+    cairo_fill(_painter);
+
+    _x = start;
+    renderComponent(_statusCmp);
+}
+
+void Bar::setColorScheme(const ColorScheme &scheme, bool invert)
+{
+    _colorScheme = invert
+        ? ColorScheme {scheme.bg, scheme.fg}
+        : ColorScheme {scheme.fg, scheme.bg};
+}
+static void setColor(cairo_t *painter, const Color &color) { cairo_set_source_rgba(painter, color.r/255.0, color.g/255.0, color.b/255.0, color.a/255.0); }
+void Bar::beginFg() { setColor(_painter, _colorScheme.fg); }
+void Bar::beginBg() { setColor(_painter, _colorScheme.bg); }
+
+void Bar::renderComponent(BarComponent &component)
+{
+    pango_cairo_update_layout(_painter, component.pangoLayout.get());
+    auto size = component.width() + paddingX*2;
+    component.x = _x;
+
+    beginBg();
+    cairo_rectangle(_painter, _x, 0, size, _bufs->height);
+    cairo_fill(_painter);
+    cairo_move_to(_painter, _x+paddingX, paddingY);
+
+    beginFg();
+    pango_cairo_show_layout(_painter, component.pangoLayout.get());
     _x += size;
 }
 
-void Bar::renderStatus()
+BarComponent Bar::createComponent(const std::string &initial)
 {
-    _painter->fillRect(_x, 0, _bufs->width-_x, _bufs->height, _painter->brush());
-    auto size = textWidth(_status) + paddingX;
-    _statusX = _bufs->width - size;
-    _painter->drawText(paddingX+_statusX, _textY, _status);
-    _x = _bufs->width;
-}
-
-int Bar::textWidth(const QString &text)
-{
-    return fontMetrics.size(Qt::TextSingleLine, text).width();
+    auto layout = pango_layout_new(_pangoContext.get());
+    pango_layout_set_font_description(layout, barfont.description);
+    auto res = BarComponent {wl_unique_ptr<PangoLayout> {layout}};
+    res.setText(initial);
+    return res;
 }
