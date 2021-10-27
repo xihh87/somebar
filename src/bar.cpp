@@ -77,9 +77,11 @@ Bar::Bar(Monitor *mon)
 }
 
 const wl_surface* Bar::surface() const { return _surface.get(); }
+bool Bar::visible() const { return _surface.get(); }
 
-void Bar::create(wl_output *output)
+void Bar::show(wl_output *output)
 {
+    if (visible()) return;
     _surface.reset(wl_compositor_create_surface(compositor));
     _layerSurface.reset(zwlr_layer_shell_v1_get_layer_surface(wlrLayerShell,
         _surface.get(), nullptr, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, "net.tapesoftware.Somebar"));
@@ -94,6 +96,13 @@ void Bar::create(wl_output *output)
     wl_surface_commit(_surface.get());
 }
 
+void Bar::hide()
+{
+    if (!visible()) return;
+    _layerSurface.reset();
+    _surface.reset();
+    _bufs.reset();
+}
 
 void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient)
 {
@@ -109,7 +118,7 @@ void Bar::setStatus(const std::string &status) { _statusCmp.setText(status); }
 
 void Bar::invalidate()
 {
-    if (_invalid) return;
+    if (_invalid || !visible()) return;
     _invalid = true;
     auto frame = wl_surface_frame(_surface.get());
     wl_callback_add_listener(frame, &_frameListener, this);
@@ -153,6 +162,7 @@ void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height
 
 void Bar::render()
 {
+    if (!visible()) return;
     auto img = wl_unique_ptr<cairo_surface_t> {cairo_image_surface_create_for_data(
         _bufs->data(),
         CAIRO_FORMAT_ARGB32,

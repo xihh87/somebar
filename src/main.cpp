@@ -29,7 +29,6 @@ struct Monitor {
     wl_unique_ptr<wl_output> wlOutput;
     wl_unique_ptr<znet_tapesoftware_dwl_wm_monitor_v1> dwlMonitor;
     std::optional<Bar> bar;
-    bool created;
 };
 struct SeatPointer {
     wl_unique_ptr<wl_pointer> wlPointer;
@@ -209,11 +208,10 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
     },
     .frame = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*) {
         auto mon = static_cast<Monitor*>(mv);
-        if (mon->created) {
+        if (mon->bar->visible()) {
             mon->bar->invalidate();
         } else {
-            mon->bar->create(mon->wlOutput.get());
-            mon->created = true;
+            mon->bar->show(mon->wlOutput.get());
         }
     }
 };
