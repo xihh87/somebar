@@ -1,5 +1,5 @@
 project('somebar', ['c', 'cpp'],
-  default_options: ['cpp_std=c++17'])
+  default_options: ['cpp_std=c++17', 'cpp_args=-Wno-parentheses'])
 
 wayland_dep = dependency('wayland-client')
 wayland_cursor_dep = dependency('wayland-cursor')

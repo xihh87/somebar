@@ -31,6 +31,8 @@ struct Monitor {
     wl_unique_ptr<wl_output> wlOutput;
     wl_unique_ptr<znet_tapesoftware_dwl_wm_monitor_v1> dwlMonitor;
     std::optional<Bar> bar;
+    bool desiredVisibility {true};
+    bool hasData;
 };
 
 struct SeatPointer {
@@ -45,13 +47,14 @@ struct Seat {
     std::optional<SeatPointer> pointer;
 };
 
-static void waylandFlush();
-static void requireGlobal(const void *p, const char *name);
+static void updatemon(Monitor &mon);
 static void setupStatusFifo();
 static void onStatus();
+static void cleanup();
+static void requireGlobal(const void *p, const char *name);
+static void waylandFlush();
 [[noreturn]] static void diesys(const char *why);
 [[noreturn]] static void die(const char *why);
-static void cleanup();
 
 wl_display *display;
 wl_compositor *compositor;
@@ -67,6 +70,7 @@ static wl_cursor_image *cursorImage;
 static bool ready;
 static std::list<Monitor> monitors;
 static std::list<Seat> seats;
+static Monitor *selmon;
 static std::string lastStatus;
 static std::string statusFifoName;
 static int epoll {-1};
@@ -74,10 +78,6 @@ static int displayFd {-1};
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
 static bool quitting {false};
-
-// Intentionally not inside Monitor, so we can preemptively manage the
-// visibility of bars on future outputs.
-static std::unordered_map<std::string, bool> barVisibility;
 
 void view(Monitor &m, const Arg &arg)
 {
@@ -212,6 +212,11 @@ static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
 static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorListener {
     .selected = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t selected) {
         auto mon = static_cast<Monitor*>(mv);
+        if (selected) {
+            selmon = mon;
+        } else if (selmon == mon) {
+            selmon = nullptr;
+        }
         mon->bar->setSelected(selected);
     },
     .tag = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t tag, uint32_t state, uint32_t numClients, int32_t focusedClient) {
@@ -228,11 +233,8 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
     },
     .frame = [](void *mv, znet_tapesoftware_dwl_wm_monitor_v1*) {
         auto mon = static_cast<Monitor*>(mv);
-        if (mon->bar->visible()) {
-            mon->bar->invalidate();
-        } else {
-            mon->bar->show(mon->wlOutput.get());
-        }
+        mon->hasData = true;
+        updatemon(*mon);
     }
 };
 
@@ -240,9 +242,23 @@ static void setupMonitor(Monitor &monitor) {
     monitor.dwlMonitor.reset(znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput.get()));
     monitor.bar.emplace(&monitor);
     monitor.bar->setStatus(lastStatus);
-    znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
     auto xdgOutput = zxdg_output_manager_v1_get_xdg_output(xdgOutputManager, monitor.wlOutput.get());
     zxdg_output_v1_add_listener(xdgOutput, &xdgOutputListener, &monitor);
+    znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
+}
+
+static void updatemon(Monitor &mon)
+{
+    if (!mon.hasData) return;
+    if (mon.desiredVisibility) {
+        if (mon.bar->visible()) {
+            mon.bar->invalidate();
+        } else {
+            mon.bar->show(mon.wlOutput.get());
+        }
+    } else if (mon.bar->visible()) {
+        mon.bar->hide();
+    }
 }
 
 // called after we have received the initial batch of globals
@@ -305,13 +321,27 @@ static void updateVisibility(const std::string &name, T updater)
 {
     auto isCurrent = name == argCurrent;
     auto isAll = name == argAll;
+    for (auto& mon : monitors) {
+        if (isAll ||
+            isCurrent && &mon == selmon ||
+            mon.xdgName == name) {
+            auto newVisibility = updater(mon.desiredVisibility);
+            if (newVisibility != mon.desiredVisibility) {
+                mon.desiredVisibility = newVisibility;
+                updatemon(mon);
+            }
+        }
+    }
 }
 
 static void onStatus()
 {
+    // this doesn't handle cases where there's multiple or partial lines in the buffer
     char buffer[512];
     auto n = read(statusFifoFd, buffer, sizeof(buffer));
     auto str = std::string {buffer, (unsigned long) n};
+    auto trailer = str.rfind('\n');
+    if (trailer != std::string::npos) str.erase(trailer);
     if (str.rfind(prefixStatus, 0) == 0) {
         lastStatus = str.substr(prefixStatus.size());
         for (auto &monitor : monitors) {
@@ -454,22 +484,12 @@ int main(int argc, char **argv)
     cleanup();
 }
 
-void die(const char *why) {
-    fprintf(stderr, "%s\n", why);
+void requireGlobal(const void *p, const char *name)
+{
+    if (p) return;
+    fprintf(stderr, "Wayland compositor does not export required global %s, aborting.\n", name);
     cleanup();
     exit(1);
-}
-
-void diesys(const char *why) {
-    perror(why);
-    cleanup();
-    exit(1);
-}
-
-void cleanup() {
-    if (!statusFifoName.empty()) {
-        unlink(statusFifoName.c_str());
-    }
 }
 
 void waylandFlush()
@@ -485,10 +505,19 @@ void waylandFlush()
     }
 }
 
-static void requireGlobal(const void *p, const char *name)
-{
-    if (p) return;
-    fprintf(stderr, "Wayland compositor does not export required global %s, aborting.\n", name);
+void die(const char *why) {
     cleanup();
     exit(1);
+}
+
+void diesys(const char *why) {
+    perror(why);
+    cleanup();
+    exit(1);
+}
+
+void cleanup() {
+    if (!statusFifoName.empty()) {
+        unlink(statusFifoName.c_str());
+    }
 }
