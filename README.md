@@ -15,7 +15,7 @@ This project is rather new. Beware of bugs.
 * libpangocairo
 
 ```
-sudo apt install build-essential meson ninja \
+sudo apt install build-essential meson ninja-build \
     libwayland-bin libwayland-client0 libwayland-cursor0 libwayland-dev \
     libcairo2 libcairo2-dev \
     libpango-1.0-0 libpango1.0-dev libpangocairo-1.0-0
