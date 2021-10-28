@@ -314,12 +314,12 @@ const std::string prefixShow = "show ";
 const std::string prefixHide = "hide ";
 const std::string prefixToggle = "toggle ";
 const std::string argAll = "all";
-const std::string argCurrent = "current";
+const std::string argSelected = "selected";
 
 template<typename T>
 static void updateVisibility(const std::string &name, T updater)
 {
-    auto isCurrent = name == argCurrent;
+    auto isCurrent = name == argSelected;
     auto isAll = name == argAll;
     for (auto& mon : monitors) {
         if (isAll ||
