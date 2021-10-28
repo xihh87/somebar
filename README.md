@@ -24,7 +24,7 @@ sudo apt install build-essential meson ninja-build \
     libpango-1.0-0 libpango1.0-dev libpangocairo-1.0-0
 ```
 
-**dwl must have the [wayland-ipc patch](https://git.sr.ht/~raphi/dwl/blob/master/patches/wayland-ipc.patch)
+**dwl must have the [wayland-ipc patch](https://git.sr.ht/~raphi/dwl/blob/master/patches/wayland-ipc.patch) applied**,
 since that's how the bar communicates with dwl.
 
 ## Configuration
