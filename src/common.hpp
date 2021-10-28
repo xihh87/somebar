@@ -47,6 +47,7 @@ void setlayout(Monitor &m, const Arg &arg);
 void tag(Monitor &m, const Arg &arg);
 void toggletag(Monitor &m, const Arg &arg);
 void spawn(Monitor&, const Arg &arg);
+[[noreturn]] void die(const char *why);
 
 // wayland smart pointers
 template<typename T>

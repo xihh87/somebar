@@ -55,7 +55,6 @@ static void cleanup();
 static void requireGlobal(const void *p, const char *name);
 static void waylandFlush();
 [[noreturn]] static void diesys(const char *why);
-[[noreturn]] static void die(const char *why);
 
 wl_display *display;
 wl_compositor *compositor;

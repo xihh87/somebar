@@ -31,10 +31,15 @@ struct Font {
 static Font getFont()
 {
     auto fontMap = pango_cairo_font_map_get_default();
+    if (!fontMap) die("pango_cairo_font_map_get_default");
     auto fontDesc = pango_font_description_from_string(font);
+    if (!fontDesc) die("pango_font_description_from_string");
     auto tempContext = pango_font_map_create_context(fontMap);
+    if (!tempContext) die("pango_font_map_create_context");
     auto font = pango_font_map_load_font(fontMap, tempContext, fontDesc);
+    if (!font) die("pango_font_map_load_font");
     auto metrics = pango_font_get_metrics(font, pango_language_get_default());
+    if (!metrics) die("pango_font_get_metrics");
 
     auto res = Font {};
     res.description = fontDesc;
@@ -43,7 +48,6 @@ static Font getFont()
     pango_font_metrics_unref(metrics);
     g_object_unref(font);
     g_object_unref(tempContext);
-    g_object_unref(fontMap);
     return res;
 }
 static Font barfont = getFont();
@@ -68,6 +72,7 @@ Bar::Bar(Monitor *mon)
 {
     _mon = mon;
     _pangoContext.reset(pango_font_map_create_context(pango_cairo_font_map_get_default()));
+    if (!_pangoContext) die("pango_font_map_create_context");
     for (auto i=0u; i<tagNames.size(); i++) {
         _tags.push_back({ ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, createComponent(tagNames[i]) });
     }
