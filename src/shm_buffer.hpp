@@ -12,11 +12,11 @@ class MemoryMapping {
     size_t _size {0};
 public:
     MemoryMapping() { }
-    explicit MemoryMapping(void *ptr, size_t size) : _ptr(ptr), _size(size) { }
+    explicit MemoryMapping(void* ptr, size_t size) : _ptr(ptr), _size(size) { }
     MemoryMapping(const MemoryMapping&) = delete;
-    MemoryMapping(MemoryMapping &&other) { swap(other); }
-    MemoryMapping& operator=(const MemoryMapping &other) = delete;
-    MemoryMapping& operator=(MemoryMapping &&other) { swap(other); return *this; }
+    MemoryMapping(MemoryMapping&& other) { swap(other); }
+    MemoryMapping& operator=(const MemoryMapping& other) = delete;
+    MemoryMapping& operator=(MemoryMapping&& other) { swap(other); return *this; }
     ~MemoryMapping() { if (_ptr) munmap(_ptr, _size); }
     void swap(MemoryMapping &other) {
         using std::swap;
@@ -29,7 +29,7 @@ public:
 // format is must be 32-bit
 class ShmBuffer {
     struct Buf {
-        uint8_t *data {nullptr};
+        uint8_t* data {nullptr};
         wl_unique_ptr<wl_buffer> buffer;
     };
     std::array<Buf, 2> _buffers;

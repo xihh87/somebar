@@ -11,12 +11,12 @@
 #include "shm_buffer.hpp"
 
 class BarComponent {
-    std::unique_ptr<char[]> _text;
+    std::unique_ptr<std::string> _text;
 public:
     BarComponent();
     explicit BarComponent(wl_unique_ptr<PangoLayout> layout);
     int width() const;
-    void setText(const std::string &text);
+    void setText(const std::string& text);
     wl_unique_ptr<PangoLayout> pangoLayout;
     int x {0};
 };
@@ -36,7 +36,7 @@ class Bar {
     wl_unique_ptr<wl_surface> _surface;
     wl_unique_ptr<zwlr_layer_surface_v1> _layerSurface;
     wl_unique_ptr<PangoContext> _pangoContext;
-    Monitor *_mon;
+    Monitor* _mon;
     std::optional<ShmBuffer> _bufs;
     std::vector<Tag> _tags;
     BarComponent _layoutCmp, _titleCmp, _statusCmp;
@@ -44,8 +44,8 @@ class Bar {
     bool _invalid {false};
 
     // only vaild during render()
-    cairo_t *_painter {nullptr};
-    int  _x;
+    cairo_t* _painter {nullptr};
+    int _x;
     ColorScheme _colorScheme;
 
     void layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height);
@@ -54,22 +54,22 @@ class Bar {
     void renderStatus();
 
     // low-level rendering
-    void setColorScheme(const ColorScheme &scheme, bool invert=false);
+    void setColorScheme(const ColorScheme& scheme, bool invert = false);
     void beginFg();
     void beginBg();
-    void renderComponent(BarComponent &component);
-    BarComponent createComponent(const std::string &initial = {});
+    void renderComponent(BarComponent& component);
+    BarComponent createComponent(const std::string& initial = {});
 public:
     Bar(Monitor *mon);
     const wl_surface* surface() const;
     bool visible() const;
-    void show(wl_output *output);
+    void show(wl_output* output);
     void hide();
     void setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient);
     void setSelected(bool selected);
     void setLayout(int layout);
-    void setTitle(const std::string &title);
-    void setStatus(const std::string &status);
+    void setTitle(const std::string& title);
+    void setStatus(const std::string& status);
     void invalidate();
     void click(int x, int y, int btn);
 };

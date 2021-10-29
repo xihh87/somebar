@@ -22,7 +22,7 @@ struct ColorScheme {
 };
 union Arg {
 	unsigned int ui;
-	const void *v;
+	const void* v;
 };
 struct Monitor;
 
@@ -30,29 +30,31 @@ enum { ClkNone, ClkTagBar, ClkLayoutSymbol, ClkWinTitle, ClkStatusText };
 struct Button {
 	int control;
 	int btn; // <linux/input-event-codes.h>
-	void (*func)(Monitor &mon, const Arg &arg);
+	void (*func)(Monitor& mon, const Arg& arg);
 	const Arg arg;
 };
 
-extern wl_display *display;
-extern wl_compositor *compositor;
-extern wl_shm *shm;
-extern zwlr_layer_shell_v1 *wlrLayerShell;
+extern wl_display* display;
+extern wl_compositor* compositor;
+extern wl_shm* shm;
+extern zwlr_layer_shell_v1* wlrLayerShell;
 extern std::vector<std::string> tagNames;
 extern std::vector<std::string> layoutNames;
 
-void view(Monitor &m, const Arg &arg);
-void toggleview(Monitor &m, const Arg &arg);
-void setlayout(Monitor &m, const Arg &arg);
-void tag(Monitor &m, const Arg &arg);
-void toggletag(Monitor &m, const Arg &arg);
-void spawn(Monitor&, const Arg &arg);
-[[noreturn]] void die(const char *why);
+void view(Monitor& m, const Arg& arg);
+void toggleview(Monitor& m, const Arg& arg);
+void setlayout(Monitor& m, const Arg& arg);
+void tag(Monitor& m, const Arg& arg);
+void toggletag(Monitor& m, const Arg& arg);
+void spawn(Monitor&, const Arg& arg);
+[[noreturn]] void die(const char* why);
 
 // wayland smart pointers
 template<typename T>
 struct wl_deleter;
-#define WL_DELETER(type, fn) template<> struct wl_deleter<type> { void operator()(type *v) { if(v) fn(v); } }
+#define WL_DELETER(type, fn) template<> struct wl_deleter<type> { \
+    void operator()(type* v) { if(v) fn(v); } \
+    }
 
 template<typename T>
 using wl_unique_ptr = std::unique_ptr<T, wl_deleter<T>>;

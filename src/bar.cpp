@@ -11,13 +11,13 @@
 #include "pango/pango-layout.h"
 
 const zwlr_layer_surface_v1_listener Bar::_layerSurfaceListener = {
-    [](void *owner, zwlr_layer_surface_v1*, uint32_t serial, uint32_t width, uint32_t height)
+    [](void* owner, zwlr_layer_surface_v1*, uint32_t serial, uint32_t width, uint32_t height)
     {
         static_cast<Bar*>(owner)->layerSurfaceConfigure(serial, width, height);
     }
 };
 const wl_callback_listener Bar::_frameListener = {
-    [](void *owner, wl_callback *cb, uint32_t)
+    [](void* owner, wl_callback* cb, uint32_t)
     {
         static_cast<Bar*>(owner)->render();
         wl_callback_destroy(cb);
@@ -25,7 +25,7 @@ const wl_callback_listener Bar::_frameListener = {
 };
 
 struct Font {
-    PangoFontDescription *description;
+    PangoFontDescription* description;
     int height {0};
 };
 static Font getFont()
@@ -60,15 +60,13 @@ int BarComponent::width() const
     pango_layout_get_size(pangoLayout.get(), &w, &h);
     return PANGO_PIXELS(w);
 }
-void BarComponent::setText(const std::string &text)
+void BarComponent::setText(const std::string& text)
 {
-    auto chars = new char[text.size()];
-    text.copy(chars, text.size());
-    _text.reset(chars);
-    pango_layout_set_text(pangoLayout.get(), chars, text.size());
+    _text = std::make_unique<std::string>(text);
+    pango_layout_set_text(pangoLayout.get(), _text->c_str(), _text->size());
 }
 
-Bar::Bar(Monitor *mon)
+Bar::Bar(Monitor* mon)
 {
     _mon = mon;
     _pangoContext.reset(pango_font_map_create_context(pango_cairo_font_map_get_default()));
@@ -84,7 +82,7 @@ Bar::Bar(Monitor *mon)
 const wl_surface* Bar::surface() const { return _surface.get(); }
 bool Bar::visible() const { return _surface.get(); }
 
-void Bar::show(wl_output *output)
+void Bar::show(wl_output* output)
 {
     if (visible()) return;
     _surface.reset(wl_compositor_create_surface(compositor));
@@ -118,8 +116,8 @@ void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, i
 }
 void Bar::setSelected(bool selected) { _selected = selected; }
 void Bar::setLayout(int layout) { _layoutCmp.setText(layoutNames[layout]); }
-void Bar::setTitle(const std::string &title) { _titleCmp.setText(title); }
-void Bar::setStatus(const std::string &status) { _statusCmp.setText(status); }
+void Bar::setTitle(const std::string& title) { _titleCmp.setText(title); }
+void Bar::setStatus(const std::string& status) { _statusCmp.setText(status); }
 
 void Bar::invalidate()
 {
@@ -133,7 +131,7 @@ void Bar::invalidate()
 void Bar::click(int x, int, int btn)
 {
     Arg arg = {0};
-    Arg *argp = nullptr;
+    Arg* argp = nullptr;
     int control = ClkNone;
     if (x > _statusCmp.x) {
         control = ClkStatusText;
@@ -225,17 +223,20 @@ void Bar::renderStatus()
     renderComponent(_statusCmp);
 }
 
-void Bar::setColorScheme(const ColorScheme &scheme, bool invert)
+void Bar::setColorScheme(const ColorScheme& scheme, bool invert)
 {
     _colorScheme = invert
         ? ColorScheme {scheme.bg, scheme.fg}
         : ColorScheme {scheme.fg, scheme.bg};
 }
-static void setColor(cairo_t *painter, const Color &color) { cairo_set_source_rgba(painter, color.r/255.0, color.g/255.0, color.b/255.0, color.a/255.0); }
+static void setColor(cairo_t* painter, const Color& color)
+{
+    cairo_set_source_rgba(painter, color.r/255.0, color.g/255.0, color.b/255.0, color.a/255.0);
+}
 void Bar::beginFg() { setColor(_painter, _colorScheme.fg); }
 void Bar::beginBg() { setColor(_painter, _colorScheme.bg); }
 
-void Bar::renderComponent(BarComponent &component)
+void Bar::renderComponent(BarComponent& component)
 {
     pango_cairo_update_layout(_painter, component.pangoLayout.get());
     auto size = component.width() + paddingX*2;
