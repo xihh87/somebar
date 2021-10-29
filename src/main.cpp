@@ -33,6 +33,7 @@ struct Monitor {
     std::optional<Bar> bar;
     bool desiredVisibility {true};
     bool hasData;
+    uint32_t tags;
 };
 
 struct SeatPointer {
@@ -84,7 +85,7 @@ void view(Monitor& m, const Arg& arg)
 }
 void toggleview(Monitor& m, const Arg& arg)
 {
-    znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), arg.ui, 0);
+    znet_tapesoftware_dwl_wm_monitor_v1_set_tags(m.dwlMonitor.get(), m.tags ^ arg.ui, 0);
 }
 void setlayout(Monitor& m, const Arg& arg)
 {
@@ -221,6 +222,12 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
     .tag = [](void* mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t tag, uint32_t state, uint32_t numClients, int32_t focusedClient) {
         auto mon = static_cast<Monitor*>(mv);
         mon->bar->setTag(tag, static_cast<znet_tapesoftware_dwl_wm_monitor_v1_tag_state>(state), numClients, focusedClient);
+        uint32_t mask = 1 << tag;
+        if (state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE) {
+            mon->tags |= mask;
+        } else {
+            mon->tags &= ~mask;
+        }
     },
     .layout = [](void* mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t layout) {
         auto mon = static_cast<Monitor*>(mv);
