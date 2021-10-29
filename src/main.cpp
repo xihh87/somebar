@@ -51,6 +51,8 @@ struct Seat {
 static void updatemon(Monitor &mon);
 static void setupStatusFifo();
 static void onStatus();
+static void onStdin();
+static void handleStdin();
 static void cleanup();
 static void requireGlobal(const void* p, const char* name);
 static void waylandFlush();
@@ -177,61 +179,6 @@ static const struct wl_seat_listener seatListener = {
 	.name = [](void*, wl_seat*, const char *name) { }
 };
 
-static void handleStdin(const std::string& line)
-{
-	// this parses the lines that dwl sends in printstatus()
-	std::string monName, command;
-	auto stream = std::istringstream {line};
-	stream >> monName >> command;
-	if (!stream.good()) {
-		return;
-	}
-	auto mon = std::find_if(begin(monitors), end(monitors), [&](const Monitor& mon) {
-		return mon.xdgName == monName;
-	});
-	if (mon == end(monitors))
-		return;
-	if (command == "title") {
-		auto title = std::string {};
- 		std::getline(stream, title);
-		mon->bar->setTitle(title);
-	} else if (command == "selmon") {
-		uint32_t selected;
-		stream >> selected;
-		mon->bar->setSelected(selected);
-	} else if (command == "tags") {
-		uint32_t occupied, tags, clientTags, urgent;
-		stream >> occupied >> tags >> clientTags >> urgent;
-		for (auto i=0u; i<tagNames.size(); i++) {
-			auto tagMask = 1 << i;
-			int state = TagState::None;
-			if (tags & tagMask)
-				state |= TagState::Active;
-			if (urgent & tagMask)
-				state |= TagState::Urgent;
-			mon->bar->setTag(i, state, occupied & tagMask ? 1 : 0, clientTags ? 1 : 0);
-		}
-		mon->tags = tags;
-	} else if (command == "layout") {
-		auto layout = std::string {};
-		std::getline(stream, layout);
-		mon->bar->setLayout(layout);
-	}
-	mon->hasData = true;
-	updatemon(*mon);
-}
-
-static LineBuffer<512> _stdinBuffer;
-static void onStdin()
-{
-	auto res = _stdinBuffer.readLines(
-		[](void* p, size_t size) { return read(0, p, size); },
-		[](char* p, size_t size) { handleStdin({p, size}); });
-	if (res == 0) {
-		quitting = true;
-	}
-}
-
 static void setupMonitor(Monitor& monitor) {
 	monitor.bar.emplace(&monitor);
 	monitor.bar->setStatus(lastStatus);
@@ -305,6 +252,61 @@ static void setupStatusFifo()
 			diesys("mkfifo");
 		}
 	}
+}
+
+static LineBuffer<512> _stdinBuffer;
+static void onStdin()
+{
+	auto res = _stdinBuffer.readLines(
+		[](void* p, size_t size) { return read(0, p, size); },
+		[](char* p, size_t size) { handleStdin({p, size}); });
+	if (res == 0) {
+		quitting = true;
+	}
+}
+
+static void handleStdin(const std::string& line)
+{
+	// this parses the lines that dwl sends in printstatus()
+	std::string monName, command;
+	auto stream = std::istringstream {line};
+	stream >> monName >> command;
+	if (!stream.good()) {
+		return;
+	}
+	auto mon = std::find_if(begin(monitors), end(monitors), [&](const Monitor& mon) {
+		return mon.xdgName == monName;
+	});
+	if (mon == end(monitors))
+		return;
+	if (command == "title") {
+		auto title = std::string {};
+ 		std::getline(stream, title);
+		mon->bar->setTitle(title);
+	} else if (command == "selmon") {
+		uint32_t selected;
+		stream >> selected;
+		mon->bar->setSelected(selected);
+	} else if (command == "tags") {
+		uint32_t occupied, tags, clientTags, urgent;
+		stream >> occupied >> tags >> clientTags >> urgent;
+		for (auto i=0u; i<tagNames.size(); i++) {
+			auto tagMask = 1 << i;
+			int state = TagState::None;
+			if (tags & tagMask)
+				state |= TagState::Active;
+			if (urgent & tagMask)
+				state |= TagState::Urgent;
+			mon->bar->setTag(i, state, occupied & tagMask ? 1 : 0, clientTags ? 1 : 0);
+		}
+		mon->tags = tags;
+	} else if (command == "layout") {
+		auto layout = std::string {};
+		std::getline(stream, layout);
+		mon->bar->setLayout(layout);
+	}
+	mon->hasData = true;
+	updatemon(*mon);
 }
 
 const std::string prefixStatus = "status ";
