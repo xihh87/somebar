@@ -127,7 +127,7 @@ static const struct wl_pointer_listener pointerListener = {
 			wl_surface_commit(cursorSurface);
 		}
 		wl_pointer_set_cursor(pointer, serial, cursorSurface,
-		cursorImage->hotspot_x, cursorImage->hotspot_y);
+			cursorImage->hotspot_x, cursorImage->hotspot_y);
 	},
 	.leave = [](void* sp, wl_pointer*, uint32_t serial, wl_surface*) {
 		auto& seat = *static_cast<Seat*>(sp);

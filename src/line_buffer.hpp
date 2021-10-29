@@ -34,7 +34,7 @@ public:
 			resetBuffer();
 		}
 	}
-	private:
+private:
 	template<typename Consumer>
 	void dispatchLines(const Consumer& consumer)
 	{

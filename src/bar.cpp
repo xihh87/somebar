@@ -91,7 +91,7 @@ void Bar::show(wl_output* output)
 	zwlr_layer_surface_v1_add_listener(_layerSurface.get(), &_layerSurfaceListener, this);
 	auto anchor = topbar ? ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP : ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
 	zwlr_layer_surface_v1_set_anchor(_layerSurface.get(),
-	anchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+		anchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
 
 	auto barSize = barfont.height + paddingY * 2;
 	zwlr_layer_surface_v1_set_size(_layerSurface.get(), 0, barSize);
@@ -115,7 +115,7 @@ void Bar::setTag(int tag, int state, int numClients, int focusedClient)
 	t.focusedClient = focusedClient;
 }
 void Bar::setSelected(bool selected) { _selected = selected; }
-void Bar::setLayout(const std::string &layout) { _layoutCmp.setText(layout); }
+void Bar::setLayout(const std::string& layout) { _layoutCmp.setText(layout); }
 void Bar::setTitle(const std::string& title) { _titleCmp.setText(title); }
 void Bar::setStatus(const std::string& status) { _statusCmp.setText(status); }
 
@@ -231,7 +231,8 @@ void Bar::setColorScheme(const ColorScheme& scheme, bool invert)
 }
 static void setColor(cairo_t* painter, const Color& color)
 {
-	cairo_set_source_rgba(painter, color.r/255.0, color.g/255.0, color.b/255.0, color.a/255.0);
+	cairo_set_source_rgba(painter,
+		color.r/255.0, color.g/255.0, color.b/255.0, color.a/255.0);
 }
 void Bar::beginFg() { setColor(_painter, _colorScheme.fg); }
 void Bar::beginBg() { setColor(_painter, _colorScheme.bg); }
