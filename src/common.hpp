@@ -13,12 +13,12 @@
 #include "net-tapesoftware-dwl-wm-unstable-v1-client-protocol.h"
 
 struct Color {
-    Color() {}
-    constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a=255) : r(r), g(g), b(b), a(a) { }
-    uint8_t r, g, b, a {255};
+	Color() {}
+	constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a=255) : r(r), g(g), b(b), a(a) { }
+	uint8_t r, g, b, a {255};
 };
 struct ColorScheme {
-    Color fg, bg;
+	Color fg, bg;
 };
 union Arg {
 	unsigned int ui;
@@ -53,8 +53,8 @@ void spawn(Monitor&, const Arg& arg);
 template<typename T>
 struct wl_deleter;
 #define WL_DELETER(type, fn) template<> struct wl_deleter<type> { \
-    void operator()(type* v) { if(v) fn(v); } \
-    }
+	void operator()(type* v) { if(v) fn(v); } \
+	}
 
 template<typename T>
 using wl_unique_ptr = std::unique_ptr<T, wl_deleter<T>>;
