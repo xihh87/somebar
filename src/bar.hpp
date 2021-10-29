@@ -22,7 +22,7 @@ public:
 };
 
 struct Tag {
-	znet_tapesoftware_dwl_wm_monitor_v1_tag_state state;
+	int state;
 	int numClients;
 	int focusedClient;
 	BarComponent component;
@@ -65,9 +65,9 @@ public:
 	bool visible() const;
 	void show(wl_output* output);
 	void hide();
-	void setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient);
+	void setTag(int tag, int state, int numClients, int focusedClient);
 	void setSelected(bool selected);
-	void setLayout(int layout);
+	void setLayout(const std::string& layout);
 	void setTitle(const std::string& title);
 	void setStatus(const std::string& status);
 	void invalidate();
