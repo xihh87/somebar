@@ -97,7 +97,7 @@ void tag(Monitor& m, const Arg& arg)
 }
 void toggletag(Monitor& m, const Arg& arg)
 {
-	znet_tapesoftware_dwl_wm_monitor_v1_set_client_tags(m.dwlMonitor.get(), 0xffffff, arg.ui);
+	znet_tapesoftware_dwl_wm_monitor_v1_set_client_tags(m.dwlMonitor.get(), ~0, arg.ui);
 }
 void spawn(Monitor&, const Arg& arg)
 {
@@ -150,7 +150,7 @@ static const struct wl_pointer_listener pointerListener = {
 			wl_surface_commit(cursorSurface);
 		}
 		wl_pointer_set_cursor(pointer, serial, cursorSurface,
-		cursorImage->hotspot_x, cursorImage->hotspot_y);
+			cursorImage->hotspot_x, cursorImage->hotspot_y);
 	},
 	.leave = [](void* sp, wl_pointer*, uint32_t serial, wl_surface*) {
 		auto& seat = *static_cast<Seat*>(sp);
