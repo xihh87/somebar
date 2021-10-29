@@ -231,7 +231,7 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
 	},
 	.layout = [](void* mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t layout) {
 		auto mon = static_cast<Monitor*>(mv);
-		mon->bar->setLayout(layout);
+		mon->bar->setLayout(layoutNames[layout]);
 	},
 	.title = [](void* mv, znet_tapesoftware_dwl_wm_monitor_v1*, const char* title) {
 		auto mon = static_cast<Monitor*>(mv);

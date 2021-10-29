@@ -115,7 +115,7 @@ void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, i
 	t.focusedClient = focusedClient;
 }
 void Bar::setSelected(bool selected) { _selected = selected; }
-void Bar::setLayout(int layout) { _layoutCmp.setText(layoutNames[layout]); }
+void Bar::setLayout(const std::string& layout) { _layoutCmp.setText(layout); }
 void Bar::setTitle(const std::string& title) { _titleCmp.setText(title); }
 void Bar::setStatus(const std::string& status) { _statusCmp.setText(status); }
 
