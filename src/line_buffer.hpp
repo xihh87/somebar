@@ -3,58 +3,69 @@
 
 #pragma once
 #include <array>
-#include <string.h>
+#include <algorithm>
+#include <sys/types.h>
 
-// reads data from Reader, and passes complete lines to Handler.
-template<size_t N>
+// reads data from Reader, and passes complete lines to Consumer.
+template<size_t BufSize>
 class LineBuffer {
-    std::array<char, N> _buffer;
-    size_t _bytesBuffered {0};
-    size_t _bytesConsumed {0};
-    bool _discardLine {0};
+    using Iterator = typename std::array<char, BufSize>::iterator;
+    std::array<char, BufSize> _buffer;
+    Iterator _bufferedTo;
+    Iterator _consumedTo;
+    bool _discardLine {false};
 public:
-    template<typename Reader, typename Handler>
-    size_t readLines(const Reader& reader, const Handler& handler)
+    LineBuffer()
+        : _bufferedTo {_buffer.begin()}
+        , _consumedTo {_buffer.begin()}
     {
-        auto d = _buffer.data();
+    }
+
+    template<typename Reader, typename Consumer>
+    ssize_t readLines(const Reader& reader, const Consumer& consumer)
+    {
         while (true) {
-            auto bytesRead = reader(d + _bytesBuffered, _buffer.size() - _bytesBuffered);
+            auto bytesRead = reader(_bufferedTo, _buffer.end() - _bufferedTo);
             if (bytesRead <= 0) {
                 return bytesRead;
             }
-
-            _bytesBuffered += bytesRead;
-            char* linePosition = nullptr;
-            do {
-                char* lineStart = d + _bytesConsumed;
-                linePosition = static_cast<char*>(memchr(
-                    lineStart,
-                    '\n',
-                    _bytesBuffered - _bytesConsumed));
-
-                if (linePosition) {
-                    int lineLength = linePosition - lineStart;
-                    if (!_discardLine) {
-                        handler(lineStart, lineLength);
-                    }
-                    _bytesConsumed += lineLength + 1;
-                    _discardLine = false;
-                }
-            } while (linePosition);
-
-            size_t bytesRemaining = _bytesBuffered - _bytesConsumed;
-            if (bytesRemaining == _buffer.size()) {
-                // line too long
-                _discardLine = true;
-                _bytesBuffered = 0;
-                _bytesConsumed = 0;
-            } else if (bytesRemaining > 0 && _bytesConsumed > 0) {
-                // move the last partial message to the front of the buffer, so a full-sized
-                // message will fit
-                memmove(d, d+_bytesConsumed, bytesRemaining);
-                _bytesBuffered = bytesRemaining;
-                _bytesConsumed = 0;
+            _bufferedTo += bytesRead;
+            dispatchLines(consumer);
+            resetBuffer();
+        }
+    }
+private:
+    template<typename Consumer>
+    void dispatchLines(const Consumer& consumer)
+    {
+        while (true) {
+            auto separator = std::find(_consumedTo, _bufferedTo, '\n');
+            if (separator == _bufferedTo) {
+                break;
             }
+            size_t lineLength = separator - _consumedTo;
+            if (!_discardLine) {
+                consumer(_consumedTo, lineLength);
+            }
+            _consumedTo = separator + 1;
+            _discardLine = false;
+        }
+    }
+
+    void resetBuffer()
+    {
+        size_t bytesRemaining = _bufferedTo - _consumedTo;
+        if (bytesRemaining == _buffer.size()) {
+            // line too long
+            _discardLine = true;
+            _consumedTo = _buffer.begin();
+            _bufferedTo = _buffer.begin();
+        } else if (bytesRemaining > 0 && _consumedTo > _buffer.begin()) {
+            // move the last partial message to the front of the buffer, so a full-sized
+            // message will fit
+            std::copy(_consumedTo, _bufferedTo, _buffer.begin());
+            _consumedTo = _buffer.begin();
+            _bufferedTo = _consumedTo + bytesRemaining;
         }
     }
 };
