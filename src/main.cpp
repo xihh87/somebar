@@ -227,9 +227,14 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
 	},
 	.tag = [](void* mv, znet_tapesoftware_dwl_wm_monitor_v1*, uint32_t tag, uint32_t state, uint32_t numClients, int32_t focusedClient) {
 		auto mon = static_cast<Monitor*>(mv);
-		mon->bar->setTag(tag, static_cast<znet_tapesoftware_dwl_wm_monitor_v1_tag_state>(state), numClients, focusedClient);
+		int tagState = TagState::None;
+		if (state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE)
+			tagState |= TagState::Active;
+		if (state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT)
+			tagState |= TagState::Urgent;
+		mon->bar->setTag(tag, tagState, numClients, focusedClient);
 		uint32_t mask = 1 << tag;
-		if (state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE) {
+		if (tagState & TagState::Active) {
 			mon->tags |= mask;
 		} else {
 			mon->tags &= ~mask;

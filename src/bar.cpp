@@ -72,7 +72,7 @@ Bar::Bar(Monitor* mon)
 	_pangoContext.reset(pango_font_map_create_context(pango_cairo_font_map_get_default()));
 	if (!_pangoContext) die("pango_font_map_create_context");
 	for (auto i=0u; i<tagNames.size(); i++) {
-		_tags.push_back({ ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_NONE, 0, 0, createComponent(tagNames[i]) });
+		_tags.push_back({ TagState::None, 0, 0, createComponent(tagNames[i]) });
 	}
 	_layoutCmp = createComponent();
 	_titleCmp = createComponent();
@@ -107,7 +107,7 @@ void Bar::hide()
 	_bufs.reset();
 }
 
-void Bar::setTag(int tag, znet_tapesoftware_dwl_wm_monitor_v1_tag_state state, int numClients, int focusedClient)
+void Bar::setTag(int tag, int state, int numClients, int focusedClient)
 {
 	auto& t = _tags[tag];
 	t.state = state;
@@ -196,8 +196,8 @@ void Bar::renderTags()
 {
 	for (auto &tag : _tags) {
 		setColorScheme(
-			tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_ACTIVE ? colorActive : colorInactive,
-			tag.state & ZNET_TAPESOFTWARE_DWL_WM_MONITOR_V1_TAG_STATE_URGENT);
+			tag.state & TagState::Active ? colorActive : colorInactive,
+			tag.state & TagState::Urgent);
 		renderComponent(tag.component);
 		auto indicators = std::min(tag.numClients, _bufs->height/2);
 		for (auto ind = 0; ind < indicators; ind++) {

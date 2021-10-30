@@ -26,6 +26,7 @@ union Arg {
 };
 struct Monitor;
 
+enum TagState { None, Active = 0x01, Urgent = 0x02 };
 enum { ClkNone, ClkTagBar, ClkLayoutSymbol, ClkWinTitle, ClkStatusText };
 struct Button {
 	int control;
