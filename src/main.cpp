@@ -188,6 +188,8 @@ static const struct wl_seat_listener seatListener = {
 void setupMonitor(Monitor& monitor) {
 	monitor.bar.emplace(&monitor);
 	monitor.bar->setStatus(lastStatus);
+	auto xdgOutput = zxdg_output_manager_v1_get_xdg_output(xdgOutputManager, monitor.wlOutput.get());
+	zxdg_output_v1_add_listener(xdgOutput, &xdgOutputListener, &monitor);
 }
 
 void updatemon(Monitor& mon)
@@ -389,8 +391,6 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
 	}
 	if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
 		auto& m = monitors.emplace_back(Monitor {name, {}, wl_unique_ptr<wl_output> {output}});
-		auto xdgOutput = zxdg_output_manager_v1_get_xdg_output(xdgOutputManager, m.wlOutput.get());
-		zxdg_output_v1_add_listener(xdgOutput, &xdgOutputListener, &m);
 		if (ready) {
 			setupMonitor(m);
 		}
