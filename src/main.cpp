@@ -48,12 +48,18 @@ struct Seat {
 	std::optional<SeatPointer> pointer;
 };
 
+static Bar* barFromSurface(const wl_surface* surface);
+static void setupMonitor(Monitor& monitor);
 static void updatemon(Monitor &mon);
+static void onReady();
 static void setupStatusFifo();
 static void onStatus();
-static void cleanup();
+static void updateVisibility(const std::string& name, bool(*updater)(bool));
+static void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interface, uint32_t version);
+static void onGlobalRemove(void*, wl_registry* registry, uint32_t name);
 static void requireGlobal(const void* p, const char* name);
 static void waylandFlush();
+static void cleanup();
 [[noreturn]] static void diesys(const char* why);
 
 wl_display* display;
@@ -129,7 +135,7 @@ static const struct zxdg_output_v1_listener xdgOutputListener = {
 	.description = [](void*, zxdg_output_v1*, const char*) { },
 };
 
-static Bar* barFromSurface(const wl_surface *surface)
+Bar* barFromSurface(const wl_surface* surface)
 {
 	auto mon = std::find_if(begin(monitors), end(monitors), [surface](const Monitor& mon) {
 		return mon.bar && mon.bar->surface() == surface;
@@ -244,7 +250,7 @@ static const struct znet_tapesoftware_dwl_wm_monitor_v1_listener dwlWmMonitorLis
 	}
 };
 
-static void setupMonitor(Monitor& monitor) {
+void setupMonitor(Monitor& monitor) {
 	monitor.dwlMonitor.reset(znet_tapesoftware_dwl_wm_v1_get_monitor(dwlWm, monitor.wlOutput.get()));
 	monitor.bar.emplace(&monitor);
 	monitor.bar->setStatus(lastStatus);
@@ -253,7 +259,7 @@ static void setupMonitor(Monitor& monitor) {
 	znet_tapesoftware_dwl_wm_monitor_v1_add_listener(monitor.dwlMonitor.get(), &dwlWmMonitorListener, &monitor);
 }
 
-static void updatemon(Monitor& mon)
+void updatemon(Monitor& mon)
 {
 	if (!mon.hasData) return;
 	if (mon.desiredVisibility) {
@@ -268,7 +274,7 @@ static void updatemon(Monitor& mon)
 }
 
 // called after we have received the initial batch of globals
-static void onReady()
+void onReady()
 {
 	requireGlobal(compositor, "wl_compositor");
 	requireGlobal(shm, "wl_shm");
@@ -283,7 +289,7 @@ static void onReady()
 	}
 }
 
-static void setupStatusFifo()
+void setupStatusFifo()
 {
 	for (auto i=0; i<100; i++) {
 		auto path = std::string{getenv("XDG_RUNTIME_DIR")} + "/somebar-" + std::to_string(i);
@@ -322,26 +328,8 @@ const std::string prefixToggle = "toggle ";
 const std::string argAll = "all";
 const std::string argSelected = "selected";
 
-template<typename T>
-static void updateVisibility(const std::string& name, T updater)
-{
-	auto isCurrent = name == argSelected;
-	auto isAll = name == argAll;
-	for (auto& mon : monitors) {
-		if (isAll ||
-			isCurrent && &mon == selmon ||
-			mon.xdgName == name) {
-			auto newVisibility = updater(mon.desiredVisibility);
-			if (newVisibility != mon.desiredVisibility) {
-				mon.desiredVisibility = newVisibility;
-				updatemon(mon);
-			}
-		}
-	}
-}
-
 static LineBuffer<512> _statusBuffer;
-static void onStatus()
+void onStatus()
 {
 	_statusBuffer.readLines(
 	[](void* p, size_t size) {
@@ -367,6 +355,23 @@ static void onStatus()
 	});
 }
 
+void updateVisibility(const std::string& name, bool(*updater)(bool))
+{
+	auto isCurrent = name == argSelected;
+	auto isAll = name == argAll;
+	for (auto& mon : monitors) {
+		if (isAll ||
+			isCurrent && &mon == selmon ||
+			mon.xdgName == name) {
+			auto newVisibility = updater(mon.desiredVisibility);
+			if (newVisibility != mon.desiredVisibility) {
+				mon.desiredVisibility = newVisibility;
+				updatemon(mon);
+			}
+		}
+	}
+}
+
 struct HandleGlobalHelper {
 	wl_registry* registry;
 	uint32_t name;
@@ -379,7 +384,7 @@ struct HandleGlobalHelper {
 		return true;
 	}
 };
-static void registryHandleGlobal(void*, wl_registry* registry, uint32_t name, const char* interface, uint32_t version)
+void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interface, uint32_t version)
 {
 	auto reg = HandleGlobalHelper { registry, name, interface };
 	if (reg.handle(compositor, wl_compositor_interface, 4)) return;
@@ -407,14 +412,14 @@ static void registryHandleGlobal(void*, wl_registry* registry, uint32_t name, co
 		return;
 	}
 }
-static void registryHandleRemove(void*, wl_registry* registry, uint32_t name)
+void onGlobalRemove(void*, wl_registry* registry, uint32_t name)
 {
 	monitors.remove_if([name](const Monitor &mon) { return mon.registryName == name; });
 	seats.remove_if([name](const Seat &seat) { return seat.name == name; });
 }
 static const struct wl_registry_listener registry_listener = {
-	.global = registryHandleGlobal,
-	.global_remove = registryHandleRemove,
+	.global = onGlobalAdd,
+	.global_remove = onGlobalRemove,
 };
 
 int main(int argc, char* argv[])
@@ -548,6 +553,12 @@ void waylandFlush()
 	}
 }
 
+void cleanup() {
+	if (!statusFifoName.empty()) {
+		unlink(statusFifoName.c_str());
+	}
+}
+
 void die(const char* why) {
 	fprintf(stderr, "%s\n", why);
 	cleanup();
@@ -558,10 +569,4 @@ void diesys(const char* why) {
 	perror(why);
 	cleanup();
 	exit(1);
-}
-
-void cleanup() {
-	if (!statusFifoName.empty()) {
-		unlink(statusFifoName.c_str());
-	}
 }
