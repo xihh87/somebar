@@ -60,7 +60,7 @@ private:
 			_discardLine = true;
 			_consumedTo = _buffer.begin();
 			_bufferedTo = _buffer.begin();
-		} else if (bytesRemaining > 0 && _consumedTo > _buffer.begin()) {
+		} else {
 			// move the last partial message to the front of the buffer, so a full-sized
 			// message will fit
 			std::copy(_consumedTo, _bufferedTo, _buffer.begin());
