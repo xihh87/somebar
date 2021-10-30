@@ -52,7 +52,7 @@ static void updatemon(Monitor &mon);
 static void setupStatusFifo();
 static void onStatus();
 static void onStdin();
-static void handleStdin();
+static void handleStdin(const std::string& line);
 static void cleanup();
 static void requireGlobal(const void* p, const char* name);
 static void waylandFlush();
@@ -208,14 +208,6 @@ static void onReady()
 	setupStatusFifo();
 	wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
 
-	epoll_event epollEv = {0};
-	epollEv.events = EPOLLIN;
-	epollEv.data.fd = 0;
-	fcntl(0, F_SETFL, O_NONBLOCK);
-	if (epoll_ctl(epoll, EPOLL_CTL_ADD, 0, &epollEv) < 0) {
-		diesys("epoll_ctl add stdin");
-	}
-
 	ready = true;
 	for (auto& monitor : monitors) {
 		setupMonitor(monitor);
@@ -297,7 +289,7 @@ static void handleStdin(const std::string& line)
 				state |= TagState::Active;
 			if (urgent & tagMask)
 				state |= TagState::Urgent;
-			mon->bar->setTag(i, state, occupied & tagMask ? 1 : 0, clientTags ? 1 : 0);
+			mon->bar->setTag(i, state, occupied & tagMask ? 1 : 0, clientTags & tagMask ? 0 : -1);
 		}
 		mon->tags = tags;
 	} else if (command == "layout") {
@@ -485,6 +477,13 @@ int main(int argc, char* argv[])
 		diesys("epoll_ctl add wayland_display");
 	}
 
+	epollEv.events = EPOLLIN;
+	epollEv.data.fd = STDIN_FILENO;
+	if (epoll_ctl(epoll, EPOLL_CTL_ADD, STDIN_FILENO, &epollEv) < 0) {
+		diesys("epoll_ctl add stdin");
+	}
+	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
+
 	while (!quitting) {
 		waylandFlush();
 		auto res = epoll_wait(epoll, epollEvents.data(), epollEvents.size(), -1);
@@ -508,7 +507,7 @@ int main(int argc, char* argv[])
 						}
 						waylandFlush();
 					}
-				} else if (ev.data.fd == 0) {
+				} else if (ev.data.fd == STDIN_FILENO) {
 					onStdin();
 				} else if (ev.data.fd == statusFifoFd) {
 					onStatus();

@@ -39,11 +39,6 @@ extern wl_compositor* compositor;
 extern wl_shm* shm;
 extern zwlr_layer_shell_v1* wlrLayerShell;
 
-void view(Monitor& m, const Arg& arg);
-void toggleview(Monitor& m, const Arg& arg);
-void setlayout(Monitor& m, const Arg& arg);
-void tag(Monitor& m, const Arg& arg);
-void toggletag(Monitor& m, const Arg& arg);
 void spawn(Monitor&, const Arg& arg);
 [[noreturn]] void die(const char* why);
 
