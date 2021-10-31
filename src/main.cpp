@@ -288,6 +288,11 @@ static void handleStdin(const std::string& line)
 		uint32_t selected;
 		stream >> selected;
 		mon->bar->setSelected(selected);
+		if (selected) {
+			selmon = &*mon;
+		} else if (selmon == &*mon) {
+			selmon = nullptr;
+		}
 	} else if (command == "tags") {
 		uint32_t occupied, tags, clientTags, urgent;
 		stream >> occupied >> tags >> clientTags >> urgent;
