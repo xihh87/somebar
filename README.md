@@ -55,6 +55,11 @@ Commands can be sent either by writing to the file name above, or equivalently b
 somebar with the `-c` argument. For example: `somebar -c toggle all`. This is recommended
 for shell scripts, as there is no race-free way to write to a file only if it exists.
 
+The maintainer of somebar also maintains
+[someblocks](https://git.sr.ht/~raphi/someblocks/),
+a fork of [dwmblocks](https://github.com/torrinfail/dwmblocks) that outputs
+to somebar instead of dwm's bar.
+
 ## IPC
 
 Out of the box, somebar cannot control dwl. Clicking on the tag bar has no
@@ -75,7 +80,8 @@ since dwl must implement the wayland extension too.
 
 ## License
 
-somebar - dwm-like bar for dwl  
+somebar - dwm-like bar for dwl
+
 Copyright (c) 2021 Raphael Robatsch
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
