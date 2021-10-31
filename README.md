@@ -24,26 +24,24 @@ sudo apt install build-essential meson ninja-build \
     libpango-1.0-0 libpango1.0-dev libpangocairo-1.0-0
 ```
 
-**dwl must have the [wayland-ipc patch](https://git.sr.ht/~raphi/dwl/blob/master/patches/wayland-ipc.patch) applied**,
-since that's how the bar communicates with dwl.
-
 ## Configuration
 
 Copy `src/config.def.hpp` to `src/config.hpp`, and adjust if needed.
 
 ## Building
 
-    meson setup build
-    ninja -C build
-    ./build/somebar
+```
+meson setup build
+ninja -C build
+sudo ninja -C build install
+```
 
 ## Usage
 
-somebar doesn't use dwl's status feature. You can start somebar using dwl's `-s` option,
-but if you do, close stdin, as somebar will not read from it.
+You must start somebar using dwl's `-s` flag, e.g. `dwl -s somebar`.
 
-Somebar can be controlled by writing to `$XDG_RUNTIME_DIR/somebar-0`. The following
-commands are supported:
+Somebar can be controlled by writing to `$XDG_RUNTIME_DIR/somebar-0`.
+The following commands are supported:
 
 * `status TEXT`: Updates the status bar
 * `hide MONITOR` Hides somebar on the specified monitor
@@ -56,6 +54,24 @@ Additionally, MONITOR can be `all` (all monitors) or `selected` (the monitor wit
 Commands can be sent either by writing to the file name above, or equivalently by calling
 somebar with the `-c` argument. For example: `somebar -c toggle all`. This is recommended
 for shell scripts, as there is no race-free way to write to a file only if it exists.
+
+## IPC
+
+Out of the box, somebar cannot control dwl. Clicking on the tag bar has no
+effect, because there is no communication channel from somebar back to dwl.
+
+If you apply the patch `contrib/ipc.patch`, then somebar will
+
+1. Not read stdin anymore, and instead use a wayland extension to read dwl's
+   state. This means you must close stdin yourself, if you choose to launch
+   somebar using dwl's -s flag.
+2. somebar can use the same wayland extension to send commands back to dwl.
+   This means that clicking on tags will switch to that tag (this can of course
+   be customized in config.h).
+
+If you apply the IPC patch to somebar, then
+**dwl must have the [wayland-ipc patch](https://git.sr.ht/~raphi/dwl/blob/master/patches/wayland-ipc.patch) applied too**,
+since dwl must implement the wayland extension too.
 
 ## License
 
