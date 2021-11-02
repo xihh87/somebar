@@ -165,7 +165,8 @@ void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height
 
 void Bar::render()
 {
-	if (!visible()) return;
+	if (!_bufs)
+		return;
 	auto img = wl_unique_ptr<cairo_surface_t> {cairo_image_surface_create_for_data(
 		_bufs->data(),
 		CAIRO_FORMAT_ARGB32,
