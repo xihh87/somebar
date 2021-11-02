@@ -36,7 +36,6 @@ class Bar {
 	wl_unique_ptr<wl_surface> _surface;
 	wl_unique_ptr<zwlr_layer_surface_v1> _layerSurface;
 	wl_unique_ptr<PangoContext> _pangoContext;
-	Monitor* _mon;
 	std::optional<ShmBuffer> _bufs;
 	std::vector<Tag> _tags;
 	BarComponent _layoutCmp, _titleCmp, _statusCmp;
@@ -60,7 +59,7 @@ class Bar {
 	void renderComponent(BarComponent& component);
 	BarComponent createComponent(const std::string& initial = {});
 public:
-	Bar(Monitor *mon);
+	Bar();
 	const wl_surface* surface() const;
 	bool visible() const;
 	void show(wl_output* output);
@@ -71,5 +70,5 @@ public:
 	void setTitle(const std::string& title);
 	void setStatus(const std::string& status);
 	void invalidate();
-	void click(int x, int y, int btn);
+	void click(Monitor* mon, int x, int y, int btn);
 };

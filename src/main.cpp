@@ -6,6 +6,7 @@
 #include <sstream>
 #include <list>
 #include <optional>
+#include <utility>
 #include <vector>
 #include <fcntl.h>
 #include <signal.h>
@@ -30,7 +31,7 @@ struct Monitor {
 	uint32_t registryName;
 	std::string xdgName;
 	wl_unique_ptr<wl_output> wlOutput;
-	std::optional<Bar> bar;
+	Bar bar;
 	bool desiredVisibility {true};
 	bool hasData;
 	uint32_t tags;
@@ -38,7 +39,7 @@ struct Monitor {
 
 struct SeatPointer {
 	wl_unique_ptr<wl_pointer> wlPointer;
-	Bar* focusedBar;
+	Monitor* focusedMonitor;
 	int x, y;
 	std::vector<int> btns;
 };
@@ -48,8 +49,8 @@ struct Seat {
 	std::optional<SeatPointer> pointer;
 };
 
-static Bar* barFromSurface(const wl_surface* surface);
-static void setupMonitor(Monitor& monitor);
+static Monitor* monitorFromSurface(const wl_surface* surface);
+static void setupMonitor(uint32_t name, wl_output* output);
 static void updatemon(Monitor &mon);
 static void onReady();
 static void setupStatusFifo();
@@ -74,6 +75,7 @@ static wl_surface* cursorSurface;
 static wl_cursor_image* cursorImage;
 static bool ready;
 static std::list<Monitor> monitors;
+static std::vector<std::pair<uint32_t, wl_output*>> uninitializedOutputs;
 static std::list<Seat> seats;
 static Monitor* selmon;
 static std::string lastStatus;
@@ -114,19 +116,19 @@ static const struct zxdg_output_v1_listener xdgOutputListener = {
 	.description = [](void*, zxdg_output_v1*, const char*) { },
 };
 
-Bar* barFromSurface(const wl_surface* surface)
+Monitor* monitorFromSurface(const wl_surface* surface)
 {
 	auto mon = std::find_if(begin(monitors), end(monitors), [surface](const Monitor& mon) {
-		return mon.bar && mon.bar->surface() == surface;
+		return mon.bar.surface() == surface;
 	});
-	return mon != end(monitors) && mon->bar ? &*mon->bar : nullptr;
+	return mon != end(monitors) ? &*mon : nullptr;
 }
 static const struct wl_pointer_listener pointerListener = {
 	.enter = [](void* sp, wl_pointer* pointer, uint32_t serial,
 	wl_surface* surface, wl_fixed_t x, wl_fixed_t y)
 	{
 		auto& seat = *static_cast<Seat*>(sp);
-		seat.pointer->focusedBar = barFromSurface(surface);
+		seat.pointer->focusedMonitor = monitorFromSurface(surface);
 		if (!cursorImage) {
 			auto cursorTheme = wl_cursor_theme_load(nullptr, 24, shm);
 			cursorImage = wl_cursor_theme_get_cursor(cursorTheme, "left_ptr")->images[0];
@@ -139,7 +141,7 @@ static const struct wl_pointer_listener pointerListener = {
 	},
 	.leave = [](void* sp, wl_pointer*, uint32_t serial, wl_surface*) {
 		auto& seat = *static_cast<Seat*>(sp);
-		seat.pointer->focusedBar = nullptr;
+		seat.pointer->focusedMonitor = nullptr;
 	},
 	.motion = [](void* sp, wl_pointer*, uint32_t, wl_fixed_t x, wl_fixed_t y) {
 		auto& seat = *static_cast<Seat*>(sp);
@@ -158,9 +160,11 @@ static const struct wl_pointer_listener pointerListener = {
 	.axis = [](void* sp, wl_pointer*, uint32_t, uint32_t, wl_fixed_t) { },
 	.frame = [](void* sp, wl_pointer*) {
 		auto& seat = *static_cast<Seat*>(sp);
-		if (!seat.pointer->focusedBar) return;
+		auto mon = seat.pointer->focusedMonitor;
+		if (!mon)
+			return;
 		for (auto btn : seat.pointer->btns) {
-			seat.pointer->focusedBar->click(seat.pointer->x, seat.pointer->y, btn);
+			mon->bar.click(mon, seat.pointer->x, seat.pointer->y, btn);
 		}
 		seat.pointer->btns.clear();
 	},
@@ -185,9 +189,9 @@ static const struct wl_seat_listener seatListener = {
 	.name = [](void*, wl_seat*, const char *name) { }
 };
 
-void setupMonitor(Monitor& monitor) {
-	monitor.bar.emplace(&monitor);
-	monitor.bar->setStatus(lastStatus);
+void setupMonitor(uint32_t name, wl_output* output) {
+	auto& monitor = monitors.emplace_back(Monitor {name, {}, wl_unique_ptr<wl_output> {output}});
+	monitor.bar.setStatus(lastStatus);
 	auto xdgOutput = zxdg_output_manager_v1_get_xdg_output(xdgOutputManager, monitor.wlOutput.get());
 	zxdg_output_v1_add_listener(xdgOutput, &xdgOutputListener, &monitor);
 }
@@ -196,13 +200,13 @@ void updatemon(Monitor& mon)
 {
 	if (!mon.hasData) return;
 	if (mon.desiredVisibility) {
-		if (mon.bar->visible()) {
-			mon.bar->invalidate();
+		if (mon.bar.visible()) {
+			mon.bar.invalidate();
 		} else {
-			mon.bar->show(mon.wlOutput.get());
+			mon.bar.show(mon.wlOutput.get());
 		}
-	} else if (mon.bar->visible()) {
-		mon.bar->hide();
+	} else if (mon.bar.visible()) {
+		mon.bar.hide();
 	}
 }
 
@@ -217,8 +221,8 @@ void onReady()
 	wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
 
 	ready = true;
-	for (auto& monitor : monitors) {
-		setupMonitor(monitor);
+	for (auto output : uninitializedOutputs) {
+		setupMonitor(output.first, output.second);
 	}
 	wl_display_roundtrip(display); // wait for xdg_output names before we read stdin
 }
@@ -283,11 +287,11 @@ static void handleStdin(const std::string& line)
 	if (command == "title") {
 		auto title = std::string {};
  		std::getline(stream, title);
-		mon->bar->setTitle(title);
+		mon->bar.setTitle(title);
 	} else if (command == "selmon") {
 		uint32_t selected;
 		stream >> selected;
-		mon->bar->setSelected(selected);
+		mon->bar.setSelected(selected);
 		if (selected) {
 			selmon = &*mon;
 		} else if (selmon == &*mon) {
@@ -303,13 +307,13 @@ static void handleStdin(const std::string& line)
 				state |= TagState::Active;
 			if (urgent & tagMask)
 				state |= TagState::Urgent;
-			mon->bar->setTag(i, state, occupied & tagMask ? 1 : 0, clientTags & tagMask ? 0 : -1);
+			mon->bar.setTag(i, state, occupied & tagMask ? 1 : 0, clientTags & tagMask ? 0 : -1);
 		}
 		mon->tags = tags;
 	} else if (command == "layout") {
 		auto layout = std::string {};
 		std::getline(stream, layout);
-		mon->bar->setLayout(layout);
+		mon->bar.setLayout(layout);
 	}
 	mon->hasData = true;
 	updatemon(*mon);
@@ -334,10 +338,8 @@ void onStatus()
 		if (str.rfind(prefixStatus, 0) == 0) {
 			lastStatus = str.substr(prefixStatus.size());
 			for (auto &monitor : monitors) {
-				if (monitor.bar) {
-					monitor.bar->setStatus(lastStatus);
-					monitor.bar->invalidate();
-				}
+				monitor.bar.setStatus(lastStatus);
+				monitor.bar.invalidate();
 			}
 		} else if (str.rfind(prefixShow, 0) == 0) {
 			updateVisibility(str.substr(prefixShow.size()), [](bool) { return true; });
@@ -395,9 +397,10 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
 		return;
 	}
 	if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
-		auto& m = monitors.emplace_back(Monitor {name, {}, wl_unique_ptr<wl_output> {output}});
 		if (ready) {
-			setupMonitor(m);
+			setupMonitor(name, output);
+		} else {
+			uninitializedOutputs.push_back({name, output});
 		}
 		return;
 	}

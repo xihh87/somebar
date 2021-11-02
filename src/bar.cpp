@@ -66,13 +66,12 @@ void BarComponent::setText(const std::string& text)
 	pango_layout_set_text(pangoLayout.get(), _text->c_str(), _text->size());
 }
 
-Bar::Bar(Monitor* mon)
+Bar::Bar()
 {
-	_mon = mon;
 	_pangoContext.reset(pango_font_map_create_context(pango_cairo_font_map_get_default()));
 	if (!_pangoContext) die("pango_font_map_create_context");
-	for (auto i=0u; i<tagNames.size(); i++) {
-		_tags.push_back({ TagState::None, 0, 0, createComponent(tagNames[i]) });
+	for (const auto& tagName : tagNames) {
+		_tags.push_back({ TagState::None, 0, 0, createComponent(tagName) });
 	}
 	_layoutCmp = createComponent();
 	_titleCmp = createComponent();
@@ -128,7 +127,7 @@ void Bar::invalidate()
 	wl_surface_commit(_surface.get());
 }
 
-void Bar::click(int x, int, int btn)
+void Bar::click(Monitor* mon, int x, int, int btn)
 {
 	Arg arg = {0};
 	Arg* argp = nullptr;
@@ -150,7 +149,7 @@ void Bar::click(int x, int, int btn)
 	for (auto i = 0u; i < sizeof(buttons)/sizeof(buttons[0]); i++) {
 		const auto& button = buttons[i];
 		if (button.control == control && button.btn == btn) {
-			button.func(*_mon, *(argp ? argp : &button.arg));
+			button.func(*mon, *(argp ? argp : &button.arg));
 			return;
 		}
 	}
