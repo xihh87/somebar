@@ -86,7 +86,7 @@ void Bar::show(wl_output* output)
 	if (visible()) return;
 	_surface.reset(wl_compositor_create_surface(compositor));
 	_layerSurface.reset(zwlr_layer_shell_v1_get_layer_surface(wlrLayerShell,
-	_surface.get(), nullptr, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, "net.tapesoftware.Somebar"));
+		_surface.get(), output, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, "net.tapesoftware.Somebar"));
 	zwlr_layer_surface_v1_add_listener(_layerSurface.get(), &_layerSurfaceListener, this);
 	auto anchor = topbar ? ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP : ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
 	zwlr_layer_surface_v1_set_anchor(_layerSurface.get(),
@@ -186,7 +186,7 @@ void Bar::render()
 
 	_painter = nullptr;
 	wl_surface_attach(_surface.get(), _bufs->buffer(), 0, 0);
-	wl_surface_damage(_surface.get(), 0, 0, INT_MAX, INT_MAX);
+	wl_surface_damage(_surface.get(), 0, 0, _bufs->width, _bufs->height);
 	wl_surface_commit(_surface.get());
 	_bufs->flip();
 	_invalid = false;
