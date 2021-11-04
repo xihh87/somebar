@@ -158,6 +158,8 @@ void Bar::click(Monitor* mon, int x, int, int btn)
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
 {
 	zwlr_layer_surface_v1_ack_configure(_layerSurface.get(), serial);
+	if (width == _bufs->width && height == _bufs->height)
+		return;
 	_bufs.emplace(width, height, WL_SHM_FORMAT_XRGB8888);
 	render();
 }
