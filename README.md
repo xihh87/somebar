@@ -22,6 +22,11 @@ sudo apt install build-essential meson ninja-build \
     libwayland-bin libwayland-client0 libwayland-cursor0 libwayland-dev \
     libcairo2 libcairo2-dev \
     libpango-1.0-0 libpango1.0-dev libpangocairo-1.0-0
+
+# or
+
+sudo pacman -S base-devel meson \
+    wayland-protocols cairo pango
 ```
 
 ## Configuration
@@ -31,6 +36,7 @@ Copy `src/config.def.hpp` to `src/config.hpp`, and adjust if needed.
 ## Building
 
 ```
+cp src/config.def.hpp src/config.hpp
 meson setup build
 ninja -C build
 sudo ninja -C build install
@@ -45,7 +51,7 @@ The following commands are supported:
 
 * `status TEXT`: Updates the status bar
 * `hide MONITOR` Hides somebar on the specified monitor
-* `shows MONITOR` Shows somebar on the specified monitor
+* `show MONITOR` Shows somebar on the specified monitor
 * `toggle MONITOR` Toggles somebar on the specified monitor
 
 MONITOR is an zxdg_output_v1 name, which can be determined e.g. using `weston-info`.

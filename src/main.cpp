@@ -562,7 +562,7 @@ void cleanup() {
 }
 
 void die(const char* why) {
-	fprintf(stderr, "%s\n", why);
+	fprintf(stderr, "error: %s failed, aborting\n", why);
 	cleanup();
 	exit(1);
 }
