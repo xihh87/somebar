@@ -5,7 +5,7 @@
 This project is rather new. Beware of bugs.
 
 The mailing list for this project is
-[~raphi/somedesktop@lists.sr.ht](mailto:~raphi/somedesktop@lists.sr.ht).
+[~raphi/public-inbox@lists.sr.ht](mailto:~raphi/public-inbox@lists.sr.ht).
 
 ## Dependencies
 
