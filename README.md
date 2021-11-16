@@ -26,7 +26,7 @@ sudo apt install build-essential meson ninja-build \
 # or
 
 sudo pacman -S base-devel meson \
-    wayland-protocols cairo pango
+    wayland wayland-protocols cairo pango
 ```
 
 ## Configuration
