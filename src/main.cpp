@@ -62,7 +62,6 @@ static void onGlobalRemove(void*, wl_registry* registry, uint32_t name);
 static void requireGlobal(const void* p, const char* name);
 static void waylandFlush();
 static void cleanup();
-[[noreturn]] static void diesys(const char* why);
 
 wl_display* display;
 wl_compositor* compositor;

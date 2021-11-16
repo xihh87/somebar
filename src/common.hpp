@@ -42,6 +42,7 @@ extern zwlr_layer_shell_v1* wlrLayerShell;
 void spawn(Monitor&, const Arg& arg);
 void setCloexec(int fd);
 [[noreturn]] void die(const char* why);
+[[noreturn]] void diesys(const char* why);
 
 // wayland smart pointers
 template<typename T>
