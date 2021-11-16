@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
-#include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -79,7 +79,7 @@ static std::list<Seat> seats;
 static Monitor* selmon;
 static std::string lastStatus;
 static std::string statusFifoName;
-static int epoll {-1};
+static std::vector<pollfd> pollfds;
 static std::array<int, 2> signalSelfPipe;
 static int displayFd {-1};
 static int statusFifoFd {-1};
@@ -246,12 +246,10 @@ void setupStatusFifo()
 			}
 			statusFifoWriter = fd;
 
-			epoll_event ev = {0};
-			ev.events = EPOLLIN;
-			ev.data.fd = statusFifoFd;
-			if (epoll_ctl(epoll, EPOLL_CTL_ADD, statusFifoFd, &ev) < 0) {
-				diesys("epoll_ctl add status fifo");
-			}
+			pollfds.push_back({
+				.fd = statusFifoFd,
+				.events = POLLIN,
+			});
 			return;
 		} else if (errno != EEXIST) {
 			diesys("mkfifo");
@@ -472,18 +470,10 @@ int main(int argc, char* argv[])
 		diesys("sigaction");
 	}
 
-	epoll_event epollEv = {0};
-	std::array<epoll_event, 5> epollEvents;
-	epoll = epoll_create1(EPOLL_CLOEXEC);
-	if (epoll < 0) {
-		diesys("epoll_create1");
-	}
-
-	epollEv.events = EPOLLIN;
-	epollEv.data.fd = signalSelfPipe[0];
-	if (epoll_ctl(epoll, EPOLL_CTL_ADD, signalSelfPipe[0], &epollEv) < 0) {
-		diesys("epoll_ctl add signal pipe");
-	}
+	pollfds.push_back({
+		.fd = signalSelfPipe[0],
+		.events = POLLIN,
+	});
 
 	display = wl_display_connect(nullptr);
 	if (!display) {
@@ -496,47 +486,43 @@ int main(int argc, char* argv[])
 	wl_display_roundtrip(display);
 	onReady();
 
-	epollEv.events = EPOLLIN;
-	epollEv.data.fd = displayFd;
-	if (epoll_ctl(epoll, EPOLL_CTL_ADD, displayFd, &epollEv) < 0) {
-		diesys("epoll_ctl add wayland_display");
+	pollfds.push_back({
+		.fd = displayFd,
+		.events = POLLIN,
+	});
+	pollfds.push_back({
+		.fd = STDIN_FILENO,
+		.events = POLLIN,
+	});
+	if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) < 0) {
+		diesys("fcntl F_SETFL");
 	}
-
-	epollEv.events = EPOLLIN;
-	epollEv.data.fd = STDIN_FILENO;
-	if (epoll_ctl(epoll, EPOLL_CTL_ADD, STDIN_FILENO, &epollEv) < 0) {
-		diesys("epoll_ctl add stdin");
-	}
-	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 
 	while (!quitting) {
 		waylandFlush();
-		auto res = epoll_wait(epoll, epollEvents.data(), epollEvents.size(), -1);
-		if (res < 0) {
+		if (poll(pollfds.data(), pollfds.size(), -1) < 0) {
 			if (errno != EINTR) {
-				diesys("epoll_wait");
+				diesys("poll");
 			}
 		} else {
-			for (auto i=0; i<res; i++) {
-				auto &ev = epollEvents[i];
-				if (ev.data.fd == displayFd) {
-					if (ev.events & EPOLLIN) {
+			for (auto& ev : pollfds) {
+				if (ev.revents & POLLNVAL) {
+					die("poll revents contains POLLNVAL");
+				} else if (ev.fd == displayFd) {
+					if (ev.revents & POLLIN) {
 						if (wl_display_dispatch(display) < 0) {
 							die("wl_display_dispatch");
 						}
-					} if (ev.events & EPOLLOUT) {
-						epollEv.events = EPOLLIN;
-						epollEv.data.fd = displayFd;
-						if (epoll_ctl(epoll, EPOLL_CTL_MOD, displayFd, &epollEv) < 0) {
-							diesys("epoll_ctl");
-						}
+					}
+					if (ev.revents & POLLOUT) {
+						ev.events = POLLIN;
 						waylandFlush();
 					}
-				} else if (ev.data.fd == STDIN_FILENO) {
+				} else if (ev.fd == STDIN_FILENO && (ev.revents & POLLIN)) {
 					onStdin();
-				} else if (ev.data.fd == statusFifoFd) {
+				} else if (ev.fd == statusFifoFd && (ev.revents & POLLIN)) {
 					onStatus();
-				} else if (ev.data.fd == signalSelfPipe[0]) {
+				} else if (ev.fd == signalSelfPipe[0] && (ev.revents & POLLIN)) {
 					quitting = true;
 				}
 			}
@@ -557,11 +543,10 @@ void waylandFlush()
 {
 	wl_display_dispatch_pending(display);
 	if (wl_display_flush(display) < 0 && errno == EAGAIN) {
-		epoll_event ev = {0};
-		ev.events = EPOLLIN | EPOLLOUT;
-		ev.data.fd = displayFd;
-		if (epoll_ctl(epoll, EPOLL_CTL_MOD, displayFd, &ev) < 0) {
-			diesys("epoll_ctl");
+		for (auto& ev : pollfds) {
+			if (ev.fd == displayFd) {
+				ev.events |= POLLOUT;
+			}
 		}
 	}
 }

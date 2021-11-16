@@ -10,7 +10,6 @@ state.
 
 Important! dwl must have the wayland-ipc patch applied for this to work!
 https://git.sr.ht/~raphi/dwl/blob/master/patches/wayland-ipc.patch
-
 diff --git a/protocols/meson.build b/protocols/meson.build
 index 7bd222b..5752608 100644
 --- a/protocols/meson.build
@@ -194,7 +193,7 @@ index 0000000..390f5a1
 +	</interface>
 +</protocol>
 diff --git a/src/common.hpp b/src/common.hpp
-index 2170103..88db973 100644
+index 0d900f0..5f9c753 100644
 --- a/src/common.hpp
 +++ b/src/common.hpp
 @@ -10,6 +10,7 @@
@@ -218,9 +217,9 @@ index 2170103..88db973 100644
 +void tag(Monitor& m, const Arg& arg);
 +void toggletag(Monitor& m, const Arg& arg);
  void spawn(Monitor&, const Arg& arg);
+ void setCloexec(int fd);
  [[noreturn]] void die(const char* why);
- 
-@@ -57,6 +65,7 @@ WL_DELETER(wl_output, wl_output_release);
+@@ -59,6 +67,7 @@ WL_DELETER(wl_output, wl_output_release);
  WL_DELETER(wl_pointer, wl_pointer_release);
  WL_DELETER(wl_seat, wl_seat_release);
  WL_DELETER(wl_surface, wl_surface_destroy);
@@ -251,7 +250,7 @@ index 40a8c95..a9560cb 100644
  	{ ClkStatusText,   BTN_RIGHT,  spawn,      {.v = termcmd} },
  };
 diff --git a/src/main.cpp b/src/main.cpp
-index 6678ee8..22b1fad 100644
+index 0aeadb2..6c5c992 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -3,7 +3,6 @@
@@ -262,7 +261,7 @@ index 6678ee8..22b1fad 100644
  #include <list>
  #include <optional>
  #include <utility>
-@@ -22,8 +21,8 @@
+@@ -21,8 +20,8 @@
  #include "wlr-layer-shell-unstable-v1-client-protocol.h"
  #include "xdg-output-unstable-v1-client-protocol.h"
  #include "xdg-shell-client-protocol.h"
@@ -272,7 +271,7 @@ index 6678ee8..22b1fad 100644
  #include "bar.hpp"
  #include "line_buffer.hpp"
  
-@@ -35,6 +34,7 @@ struct Monitor {
+@@ -34,6 +33,7 @@ struct Monitor {
  	bool desiredVisibility {true};
  	bool hasData;
  	uint32_t tags;
@@ -280,7 +279,7 @@ index 6678ee8..22b1fad 100644
  };
  
  struct SeatPointer {
-@@ -55,8 +55,6 @@ static void updatemon(Monitor &mon);
+@@ -54,8 +54,6 @@ static void updatemon(Monitor &mon);
  static void onReady();
  static void setupStatusFifo();
  static void onStatus();
@@ -289,7 +288,7 @@ index 6678ee8..22b1fad 100644
  static void updateVisibility(const std::string& name, bool(*updater)(bool));
  static void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interface, uint32_t version);
  static void onGlobalRemove(void*, wl_registry* registry, uint32_t name);
-@@ -69,6 +67,9 @@ wl_display* display;
+@@ -67,6 +65,9 @@ wl_display* display;
  wl_compositor* compositor;
  wl_shm* shm;
  zwlr_layer_shell_v1* wlrLayerShell;
@@ -299,7 +298,7 @@ index 6678ee8..22b1fad 100644
  static xdg_wm_base* xdgWmBase;
  static zxdg_output_manager_v1* xdgOutputManager;
  static wl_surface* cursorSurface;
-@@ -86,6 +87,26 @@ static int statusFifoFd {-1};
+@@ -85,6 +86,26 @@ static int statusFifoFd {-1};
  static int statusFifoWriter {-1};
  static bool quitting {false};
  
@@ -326,7 +325,7 @@ index 6678ee8..22b1fad 100644
  void spawn(Monitor&, const Arg& arg)
  {
  	if (fork() == 0) {
-@@ -189,11 +210,62 @@ static const struct wl_seat_listener seatListener = {
+@@ -188,11 +209,62 @@ static const struct wl_seat_listener seatListener = {
  	.name = [](void*, wl_seat*, const char *name) { }
  };
  
@@ -389,7 +388,7 @@ index 6678ee8..22b1fad 100644
  }
  
  void updatemon(Monitor& mon)
-@@ -217,6 +289,7 @@ void onReady()
+@@ -216,6 +288,7 @@ void onReady()
  	requireGlobal(shm, "wl_shm");
  	requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
  	requireGlobal(xdgOutputManager, "zxdg_output_manager_v1");
@@ -397,7 +396,7 @@ index 6678ee8..22b1fad 100644
  	setupStatusFifo();
  	wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
  
-@@ -224,7 +297,6 @@ void onReady()
+@@ -223,7 +296,6 @@ void onReady()
  	for (auto output : uninitializedOutputs) {
  		setupMonitor(output.first, output.second);
  	}
@@ -405,7 +404,7 @@ index 6678ee8..22b1fad 100644
  }
  
  void setupStatusFifo()
-@@ -259,66 +331,6 @@ void setupStatusFifo()
+@@ -256,66 +328,6 @@ void setupStatusFifo()
  	}
  }
  
@@ -472,7 +471,7 @@ index 6678ee8..22b1fad 100644
  const std::string prefixStatus = "status ";
  const std::string prefixShow = "show ";
  const std::string prefixHide = "hide ";
-@@ -391,6 +403,10 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
+@@ -388,6 +400,10 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
  		xdg_wm_base_add_listener(xdgWmBase, &xdgWmBaseListener, nullptr);
  		return;
  	}
@@ -483,26 +482,23 @@ index 6678ee8..22b1fad 100644
  	if (wl_seat *wlSeat; reg.handle(wlSeat, wl_seat_interface, 7)) {
  		auto& seat = seats.emplace_back(Seat {name, wl_unique_ptr<wl_seat> {wlSeat}});
  		wl_seat_add_listener(wlSeat, &seatListener, &seat);
-@@ -491,13 +507,6 @@ int main(int argc, char* argv[])
- 		diesys("epoll_ctl add wayland_display");
+@@ -489,10 +505,6 @@ int main(int argc, char* argv[])
+ 		.fd = displayFd,
+ 		.events = POLLIN,
+ 	});
+-	pollfds.push_back({
+-		.fd = STDIN_FILENO,
+-		.events = POLLIN,
+-	});
+ 	if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) < 0) {
+ 		diesys("fcntl F_SETFL");
  	}
- 
--	epollEv.events = EPOLLIN;
--	epollEv.data.fd = STDIN_FILENO;
--	if (epoll_ctl(epoll, EPOLL_CTL_ADD, STDIN_FILENO, &epollEv) < 0) {
--		diesys("epoll_ctl add stdin");
--	}
--	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
--
- 	while (!quitting) {
- 		waylandFlush();
- 		auto res = epoll_wait(epoll, epollEvents.data(), epollEvents.size(), -1);
-@@ -521,8 +530,6 @@ int main(int argc, char* argv[])
- 						}
+@@ -517,8 +529,6 @@ int main(int argc, char* argv[])
+ 						ev.events = POLLIN;
  						waylandFlush();
  					}
--				} else if (ev.data.fd == STDIN_FILENO) {
+-				} else if (ev.fd == STDIN_FILENO && (ev.revents & POLLIN)) {
 -					onStdin();
- 				} else if (ev.data.fd == statusFifoFd) {
+ 				} else if (ev.fd == statusFifoFd && (ev.revents & POLLIN)) {
  					onStatus();
- 				} else if (ev.data.fd == sfd) {
+ 				} else if (ev.fd == signalSelfPipe[0] && (ev.revents & POLLIN)) {
