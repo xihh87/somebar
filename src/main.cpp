@@ -12,7 +12,6 @@
 #include <signal.h>
 #include <sys/epoll.h>
 #include <sys/mman.h>
-#include <sys/signalfd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -81,6 +80,7 @@ static Monitor* selmon;
 static std::string lastStatus;
 static std::string statusFifoName;
 static int epoll {-1};
+static std::array<int, 2> signalSelfPipe;
 static int displayFd {-1};
 static int statusFifoFd {-1};
 static int statusFifoWriter {-1};
@@ -452,11 +452,25 @@ int main(int argc, char* argv[])
 				exit(0);
 		}
 	}
-	static sigset_t blockedsigs;
-	sigemptyset(&blockedsigs);
-	sigaddset(&blockedsigs, SIGINT);
-	sigaddset(&blockedsigs, SIGTERM);
-	sigprocmask(SIG_BLOCK, &blockedsigs, nullptr);
+	
+	if (pipe(signalSelfPipe.data()) < 0) {
+		diesys("pipe");
+	}
+	setCloexec(signalSelfPipe[0]);
+	setCloexec(signalSelfPipe[1]);
+
+	struct sigaction sighandler = {};
+	sighandler.sa_handler = [](int) {
+		if (write(signalSelfPipe[1], "0", 1) < 0) {
+			diesys("write");
+		}
+	};
+	if (sigaction(SIGTERM, &sighandler, nullptr) < 0) {
+		diesys("sigaction");
+	}
+	if (sigaction(SIGINT, &sighandler, nullptr) < 0) {
+		diesys("sigaction");
+	}
 
 	epoll_event epollEv = {0};
 	std::array<epoll_event, 5> epollEvents;
@@ -464,14 +478,11 @@ int main(int argc, char* argv[])
 	if (epoll < 0) {
 		diesys("epoll_create1");
 	}
-	int sfd = signalfd(-1, &blockedsigs, SFD_CLOEXEC | SFD_NONBLOCK);
-	if (sfd < 0) {
-		diesys("signalfd");
-	}
+
 	epollEv.events = EPOLLIN;
-	epollEv.data.fd = sfd;
-	if (epoll_ctl(epoll, EPOLL_CTL_ADD, sfd, &epollEv) < 0) {
-		diesys("epoll_ctl add signalfd");
+	epollEv.data.fd = signalSelfPipe[0];
+	if (epoll_ctl(epoll, EPOLL_CTL_ADD, signalSelfPipe[0], &epollEv) < 0) {
+		diesys("epoll_ctl add signal pipe");
 	}
 
 	display = wl_display_connect(nullptr);
@@ -525,7 +536,7 @@ int main(int argc, char* argv[])
 					onStdin();
 				} else if (ev.data.fd == statusFifoFd) {
 					onStatus();
-				} else if (ev.data.fd == sfd) {
+				} else if (ev.data.fd == signalSelfPipe[0]) {
 					quitting = true;
 				}
 			}
@@ -552,6 +563,17 @@ void waylandFlush()
 		if (epoll_ctl(epoll, EPOLL_CTL_MOD, displayFd, &ev) < 0) {
 			diesys("epoll_ctl");
 		}
+	}
+}
+
+void setCloexec(int fd)
+{
+	int flags = fcntl(fd, F_GETFD);
+	if (flags == -1) {
+		diesys("fcntl FD_GETFD");
+	}
+	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0) {
+		diesys("fcntl FD_SETFD");
 	}
 }
 
