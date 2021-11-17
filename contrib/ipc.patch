@@ -193,7 +193,7 @@ index 0000000..390f5a1
 +	</interface>
 +</protocol>
 diff --git a/src/common.hpp b/src/common.hpp
-index 0d900f0..5f9c753 100644
+index aed4480..12a3e2e 100644
 --- a/src/common.hpp
 +++ b/src/common.hpp
 @@ -10,6 +10,7 @@
@@ -250,7 +250,7 @@ index 40a8c95..a9560cb 100644
  	{ ClkStatusText,   BTN_RIGHT,  spawn,      {.v = termcmd} },
  };
 diff --git a/src/main.cpp b/src/main.cpp
-index 0aeadb2..6c5c992 100644
+index 6198d8b..9e7549a 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -3,7 +3,6 @@
@@ -325,8 +325,8 @@ index 0aeadb2..6c5c992 100644
  void spawn(Monitor&, const Arg& arg)
  {
  	if (fork() == 0) {
-@@ -188,11 +209,62 @@ static const struct wl_seat_listener seatListener = {
- 	.name = [](void*, wl_seat*, const char *name) { }
+@@ -189,11 +210,62 @@ static const struct wl_seat_listener seatListener = {
+ 	.name = [](void*, wl_seat*, const char* name) { }
  };
  
 +static const struct znet_tapesoftware_dwl_wm_v1_listener dwlWmListener = {
@@ -388,7 +388,7 @@ index 0aeadb2..6c5c992 100644
  }
  
  void updatemon(Monitor& mon)
-@@ -216,6 +288,7 @@ void onReady()
+@@ -219,6 +291,7 @@ void onReady()
  	requireGlobal(shm, "wl_shm");
  	requireGlobal(wlrLayerShell, "zwlr_layer_shell_v1");
  	requireGlobal(xdgOutputManager, "zxdg_output_manager_v1");
@@ -396,7 +396,7 @@ index 0aeadb2..6c5c992 100644
  	setupStatusFifo();
  	wl_display_roundtrip(display); // roundtrip so we receive all dwl tags etc.
  
-@@ -223,7 +296,6 @@ void onReady()
+@@ -226,7 +299,6 @@ void onReady()
  	for (auto output : uninitializedOutputs) {
  		setupMonitor(output.first, output.second);
  	}
@@ -404,14 +404,14 @@ index 0aeadb2..6c5c992 100644
  }
  
  void setupStatusFifo()
-@@ -256,66 +328,6 @@ void setupStatusFifo()
+@@ -259,66 +331,6 @@ void setupStatusFifo()
  	}
  }
  
--static LineBuffer<512> _stdinBuffer;
+-static LineBuffer<512> stdinBuffer;
 -static void onStdin()
 -{
--	auto res = _stdinBuffer.readLines(
+-	auto res = stdinBuffer.readLines(
 -		[](void* p, size_t size) { return read(0, p, size); },
 -		[](char* p, size_t size) { handleStdin({p, size}); });
 -	if (res == 0) {
@@ -471,7 +471,7 @@ index 0aeadb2..6c5c992 100644
  const std::string prefixStatus = "status ";
  const std::string prefixShow = "show ";
  const std::string prefixHide = "hide ";
-@@ -388,6 +400,10 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
+@@ -393,6 +405,10 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
  		xdg_wm_base_add_listener(xdgWmBase, &xdgWmBaseListener, nullptr);
  		return;
  	}
@@ -479,10 +479,10 @@ index 0aeadb2..6c5c992 100644
 +		znet_tapesoftware_dwl_wm_v1_add_listener(dwlWm, &dwlWmListener, nullptr);
 +		return;
 +	}
- 	if (wl_seat *wlSeat; reg.handle(wlSeat, wl_seat_interface, 7)) {
+ 	if (wl_seat* wlSeat; reg.handle(wlSeat, wl_seat_interface, 7)) {
  		auto& seat = seats.emplace_back(Seat {name, wl_unique_ptr<wl_seat> {wlSeat}});
  		wl_seat_add_listener(wlSeat, &seatListener, &seat);
-@@ -489,10 +505,6 @@ int main(int argc, char* argv[])
+@@ -494,10 +510,6 @@ int main(int argc, char* argv[])
  		.fd = displayFd,
  		.events = POLLIN,
  	});
@@ -493,7 +493,7 @@ index 0aeadb2..6c5c992 100644
  	if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) < 0) {
  		diesys("fcntl F_SETFL");
  	}
-@@ -517,8 +529,6 @@ int main(int argc, char* argv[])
+@@ -522,8 +534,6 @@ int main(int argc, char* argv[])
  						ev.events = POLLIN;
  						waylandFlush();
  					}

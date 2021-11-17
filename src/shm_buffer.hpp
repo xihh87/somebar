@@ -36,7 +36,7 @@ class ShmBuffer {
 	int _current {0};
 	MemoryMapping _mapping;
 public:
-	uint32_t width, height, stride;
+	const uint32_t width, height, stride;
 
 	explicit ShmBuffer(int width, int height, wl_shm_format format);
 	uint8_t* data();

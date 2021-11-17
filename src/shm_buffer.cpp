@@ -27,6 +27,9 @@ ShmBuffer::ShmBuffer(int w, int h, wl_shm_format format)
 	}
 	auto pool = wl_shm_create_pool(shm, fd, totalSize);
 	auto ptr = reinterpret_cast<uint8_t*>(mmap(nullptr, totalSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+	if (!ptr) {
+		diesys("mmap");
+	}
 	_mapping = MemoryMapping {ptr, totalSize};
 	close(fd);
 	for (auto i=0; i<n; i++) {
@@ -39,22 +42,33 @@ ShmBuffer::ShmBuffer(int w, int h, wl_shm_format format)
 	wl_shm_pool_destroy(pool);
 }
 
-uint8_t* ShmBuffer::data() { return _buffers[_current].data; }
-wl_buffer* ShmBuffer::buffer() { return _buffers[_current].buffer.get(); }
-void ShmBuffer::flip() { _current = 1-_current; }
+uint8_t* ShmBuffer::data()
+{
+	return _buffers[_current].data;
+}
+
+wl_buffer* ShmBuffer::buffer()
+{
+	return _buffers[_current].buffer.get();
+}
+
+void ShmBuffer::flip()
+{
+	_current = 1-_current;
+}
 
 #if defined(__linux__)
-static int createAnonShm() {
+int createAnonShm() {
 	return memfd_create("wl_shm", MFD_CLOEXEC);
 }
 #elif defined(__FreeBSD__)
-static int createAnonShm() {
+int createAnonShm() {
 	auto fd = shm_open(SHM_ANON, O_CREAT | O_RDWR, 0600);
 	setCloexec(fd);
 	return fd;
 }
 #elif defined(__OpenBSD__)
-static int createAnonShm() {
+int createAnonShm() {
 	char name[] = "/wl_shm-XXXXXX";
 	auto fd = shm_mkstemp(name);
 	if (fd >= 0) {

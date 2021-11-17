@@ -160,8 +160,9 @@ static const struct wl_pointer_listener pointerListener = {
 	.frame = [](void* sp, wl_pointer*) {
 		auto& seat = *static_cast<Seat*>(sp);
 		auto mon = seat.pointer->focusedMonitor;
-		if (!mon)
+		if (!mon) {
 			return;
+		}
 		for (auto btn : seat.pointer->btns) {
 			mon->bar.click(mon, seat.pointer->x, seat.pointer->y, btn);
 		}
@@ -185,7 +186,7 @@ static const struct wl_seat_listener seatListener = {
 			seat.pointer.reset();
 		}
 	},
-	.name = [](void*, wl_seat*, const char *name) { }
+	.name = [](void*, wl_seat*, const char* name) { }
 };
 
 void setupMonitor(uint32_t name, wl_output* output) {
@@ -197,7 +198,9 @@ void setupMonitor(uint32_t name, wl_output* output) {
 
 void updatemon(Monitor& mon)
 {
-	if (!mon.hasData) return;
+	if (!mon.hasData) {
+		return;
+	}
 	if (mon.desiredVisibility) {
 		if (mon.bar.visible()) {
 			mon.bar.invalidate();
@@ -256,10 +259,10 @@ void setupStatusFifo()
 	}
 }
 
-static LineBuffer<512> _stdinBuffer;
+static LineBuffer<512> stdinBuffer;
 static void onStdin()
 {
-	auto res = _stdinBuffer.readLines(
+	auto res = stdinBuffer.readLines(
 		[](void* p, size_t size) { return read(0, p, size); },
 		[](char* p, size_t size) { handleStdin({p, size}); });
 	if (res == 0) {
@@ -323,10 +326,10 @@ const std::string prefixToggle = "toggle ";
 const std::string argAll = "all";
 const std::string argSelected = "selected";
 
-static LineBuffer<512> _statusBuffer;
+static LineBuffer<512> statusBuffer;
 void onStatus()
 {
-	_statusBuffer.readLines(
+	statusBuffer.readLines(
 	[](void* p, size_t size) {
 		return read(statusFifoFd, p, size);
 	},
@@ -372,7 +375,9 @@ struct HandleGlobalHelper {
 
 	template<typename T>
 	bool handle(T& store, const wl_interface& iface, int version) {
-		if (strcmp(interface, iface.name)) return false;
+		if (strcmp(interface, iface.name)) {
+			return false;
+		}
 		store = static_cast<T>(wl_registry_bind(registry, name, &iface, version));
 		return true;
 	}
@@ -388,12 +393,12 @@ void onGlobalAdd(void*, wl_registry* registry, uint32_t name, const char* interf
 		xdg_wm_base_add_listener(xdgWmBase, &xdgWmBaseListener, nullptr);
 		return;
 	}
-	if (wl_seat *wlSeat; reg.handle(wlSeat, wl_seat_interface, 7)) {
+	if (wl_seat* wlSeat; reg.handle(wlSeat, wl_seat_interface, 7)) {
 		auto& seat = seats.emplace_back(Seat {name, wl_unique_ptr<wl_seat> {wlSeat}});
 		wl_seat_add_listener(wlSeat, &seatListener, &seat);
 		return;
 	}
-	if (wl_output *output; reg.handle(output, wl_output_interface, 1)) {
+	if (wl_output* output; reg.handle(output, wl_output_interface, 1)) {
 		if (ready) {
 			setupMonitor(name, output);
 		} else {
@@ -530,7 +535,7 @@ int main(int argc, char* argv[])
 	cleanup();
 }
 
-void requireGlobal(const void *p, const char *name)
+void requireGlobal(const void* p, const char* name)
 {
 	if (p) return;
 	fprintf(stderr, "Wayland compositor does not export required global %s, aborting.\n", name);

@@ -26,7 +26,7 @@ union Arg {
 struct Monitor;
 
 enum TagState { None, Active = 0x01, Urgent = 0x02 };
-enum { ClkNone, ClkTagBar, ClkLayoutSymbol, ClkWinTitle, ClkStatusText };
+enum Control { ClkNone, ClkTagBar, ClkLayoutSymbol, ClkWinTitle, ClkStatusText };
 struct Button {
 	int control;
 	int btn; // <linux/input-event-codes.h>
@@ -46,13 +46,13 @@ void setCloexec(int fd);
 
 // wayland smart pointers
 template<typename T>
-struct wl_deleter;
-#define WL_DELETER(type, fn) template<> struct wl_deleter<type> { \
+struct WlDeleter;
+#define WL_DELETER(type, fn) template<> struct WlDeleter<type> { \
 	void operator()(type* v) { if(v) fn(v); } \
 	}
 
 template<typename T>
-using wl_unique_ptr = std::unique_ptr<T, wl_deleter<T>>;
+using wl_unique_ptr = std::unique_ptr<T, WlDeleter<T>>;
 
 WL_DELETER(wl_buffer, wl_buffer_destroy);
 WL_DELETER(wl_output, wl_output_release);
@@ -66,3 +66,5 @@ WL_DELETER(cairo_surface_t, cairo_surface_destroy);
 
 WL_DELETER(PangoContext, g_object_unref);
 WL_DELETER(PangoLayout, g_object_unref);
+
+#undef WL_DELETER

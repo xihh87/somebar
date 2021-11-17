@@ -31,15 +31,25 @@ struct Font {
 static Font getFont()
 {
 	auto fontMap = pango_cairo_font_map_get_default();
-	if (!fontMap) die("pango_cairo_font_map_get_default");
+	if (!fontMap) {
+		die("pango_cairo_font_map_get_default");
+	}
 	auto fontDesc = pango_font_description_from_string(font);
-	if (!fontDesc) die("pango_font_description_from_string");
+	if (!fontDesc) {
+		die("pango_font_description_from_string");
+	}
 	auto tempContext = pango_font_map_create_context(fontMap);
-	if (!tempContext) die("pango_font_map_create_context");
+	if (!tempContext) {
+		die("pango_font_map_create_context");
+	}
 	auto font = pango_font_map_load_font(fontMap, tempContext, fontDesc);
-	if (!font) die("pango_font_map_load_font");
+	if (!font) {
+		die("pango_font_map_load_font");
+	}
 	auto metrics = pango_font_get_metrics(font, pango_language_get_default());
-	if (!metrics) die("pango_font_get_metrics");
+	if (!metrics) {
+		die("pango_font_get_metrics");
+	}
 
 	auto res = Font {};
 	res.description = fontDesc;
@@ -53,13 +63,18 @@ static Font getFont()
 static Font barfont = getFont();
 
 BarComponent::BarComponent() { }
-BarComponent::BarComponent(wl_unique_ptr<PangoLayout> layout) : pangoLayout {std::move(layout)} {}
+BarComponent::BarComponent(wl_unique_ptr<PangoLayout> layout)
+	: pangoLayout {std::move(layout)}
+{
+}
+
 int BarComponent::width() const
 {
 	int w, h;
 	pango_layout_get_size(pangoLayout.get(), &w, &h);
 	return PANGO_PIXELS(w);
 }
+
 void BarComponent::setText(const std::string& text)
 {
 	_text = std::make_unique<std::string>(text);
@@ -69,7 +84,9 @@ void BarComponent::setText(const std::string& text)
 Bar::Bar()
 {
 	_pangoContext.reset(pango_font_map_create_context(pango_cairo_font_map_get_default()));
-	if (!_pangoContext) die("pango_font_map_create_context");
+	if (!_pangoContext) {
+		die("pango_font_map_create_context");
+	}
 	for (const auto& tagName : tagNames) {
 		_tags.push_back({ TagState::None, 0, 0, createComponent(tagName) });
 	}
@@ -78,12 +95,21 @@ Bar::Bar()
 	_statusCmp = createComponent();
 }
 
-const wl_surface* Bar::surface() const { return _surface.get(); }
-bool Bar::visible() const { return _surface.get(); }
+const wl_surface* Bar::surface() const
+{
+	return _surface.get();
+}
+
+bool Bar::visible() const
+{
+	return _surface.get();
+}
 
 void Bar::show(wl_output* output)
 {
-	if (visible()) return;
+	if (visible()) {
+		return;
+	}
 	_surface.reset(wl_compositor_create_surface(compositor));
 	_layerSurface.reset(zwlr_layer_shell_v1_get_layer_surface(wlrLayerShell,
 		_surface.get(), output, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, "net.tapesoftware.Somebar"));
@@ -100,7 +126,9 @@ void Bar::show(wl_output* output)
 
 void Bar::hide()
 {
-	if (!visible()) return;
+	if (!visible()) {
+		return;
+	}
 	_layerSurface.reset();
 	_surface.reset();
 	_bufs.reset();
@@ -113,14 +141,29 @@ void Bar::setTag(int tag, int state, int numClients, int focusedClient)
 	t.numClients = numClients;
 	t.focusedClient = focusedClient;
 }
-void Bar::setSelected(bool selected) { _selected = selected; }
-void Bar::setLayout(const std::string& layout) { _layoutCmp.setText(layout); }
-void Bar::setTitle(const std::string& title) { _titleCmp.setText(title); }
-void Bar::setStatus(const std::string& status) { _statusCmp.setText(status); }
+
+void Bar::setSelected(bool selected)
+{
+	_selected = selected;
+}
+void Bar::setLayout(const std::string& layout)
+{
+	_layoutCmp.setText(layout);
+}
+void Bar::setTitle(const std::string& title)
+{
+	_titleCmp.setText(title);
+}
+void Bar::setStatus(const std::string& status)
+{
+	_statusCmp.setText(status);
+}
 
 void Bar::invalidate()
 {
-	if (_invalid || !visible()) return;
+	if (_invalid || !visible()) {
+		return;
+	}
 	_invalid = true;
 	auto frame = wl_surface_frame(_surface.get());
 	wl_callback_add_listener(frame, &_frameListener, this);
@@ -146,8 +189,7 @@ void Bar::click(Monitor* mon, int x, int, int btn)
 			break;
 		}
 	}
-	for (auto i = 0u; i < sizeof(buttons)/sizeof(buttons[0]); i++) {
-		const auto& button = buttons[i];
+	for (const auto& button : buttons) {
 		if (button.control == control && button.btn == btn) {
 			button.func(*mon, *(argp ? argp : &button.arg));
 			return;
@@ -158,16 +200,18 @@ void Bar::click(Monitor* mon, int x, int, int btn)
 void Bar::layerSurfaceConfigure(uint32_t serial, uint32_t width, uint32_t height)
 {
 	zwlr_layer_surface_v1_ack_configure(_layerSurface.get(), serial);
-	if (width == _bufs->width && height == _bufs->height)
+	if (width == _bufs->width && height == _bufs->height) {
 		return;
+	}
 	_bufs.emplace(width, height, WL_SHM_FORMAT_XRGB8888);
 	render();
 }
 
 void Bar::render()
 {
-	if (!_bufs)
+	if (!_bufs) {
 		return;
+	}
 	auto img = wl_unique_ptr<cairo_surface_t> {cairo_image_surface_create_for_data(
 		_bufs->data(),
 		CAIRO_FORMAT_ARGB32,
@@ -236,8 +280,14 @@ static void setColor(cairo_t* painter, const Color& color)
 	cairo_set_source_rgba(painter,
 		color.r/255.0, color.g/255.0, color.b/255.0, color.a/255.0);
 }
-void Bar::beginFg() { setColor(_painter, _colorScheme.fg); }
-void Bar::beginBg() { setColor(_painter, _colorScheme.bg); }
+void Bar::beginFg()
+{
+	setColor(_painter, _colorScheme.fg);
+}
+void Bar::beginBg()
+{
+	setColor(_painter, _colorScheme.bg);
+}
 
 void Bar::renderComponent(BarComponent& component)
 {
