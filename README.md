@@ -46,7 +46,8 @@ sudo ninja -C build install
 
 You must start somebar using dwl's `-s` flag, e.g. `dwl -s somebar`.
 
-Somebar can be controlled by writing to `$XDG_RUNTIME_DIR/somebar-0`.
+Somebar can be controlled by writing to `$XDG_RUNTIME_DIR/somebar-0`
+or the path defined by `-s` argument.
 The following commands are supported:
 
 * `status TEXT`: Updates the status bar

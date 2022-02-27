@@ -229,32 +229,46 @@ void onReady()
 	wl_display_roundtrip(display); // wait for xdg_output names before we read stdin
 }
 
+bool createFifo(std::string path)
+{
+	auto result = mkfifo(path.c_str(), 0666);
+	if (result == 0) {
+		auto fd = open(path.c_str(), O_CLOEXEC | O_NONBLOCK | O_RDONLY);
+		if (fd < 0) {
+			diesys("open status fifo reader");
+		}
+		statusFifoName = path;
+		statusFifoFd = fd;
+
+		fd = open(path.c_str(), O_CLOEXEC | O_WRONLY);
+		if (fd < 0) {
+			diesys("open status fifo writer");
+		}
+		statusFifoWriter = fd;
+
+		pollfds.push_back({
+			.fd = statusFifoFd,
+			.events = POLLIN,
+		});
+		return true;
+	} else if (errno != EEXIST) {
+		diesys("mkfifo");
+	}
+
+	return false;
+}
+
 void setupStatusFifo()
 {
+	if (!statusFifoName.empty()) {
+		createFifo(statusFifoName);
+		return;
+	}
+
 	for (auto i=0; i<100; i++) {
 		auto path = std::string{getenv("XDG_RUNTIME_DIR")} + "/somebar-" + std::to_string(i);
-		auto result = mkfifo(path.c_str(), 0666);
-		if (result == 0) {
-			auto fd = open(path.c_str(), O_CLOEXEC | O_NONBLOCK | O_RDONLY);
-			if (fd < 0) {
-				diesys("open status fifo reader");
-			}
-			statusFifoName = path;
-			statusFifoFd = fd;
-
-			fd = open(path.c_str(), O_CLOEXEC | O_WRONLY);
-			if (fd < 0) {
-				diesys("open status fifo writer");
-			}
-			statusFifoWriter = fd;
-
-			pollfds.push_back({
-				.fd = statusFifoFd,
-				.events = POLLIN,
-			});
+		if (createFifo(path)) {
 			return;
-		} else if (errno != EEXIST) {
-			diesys("mkfifo");
 		}
 	}
 }
@@ -420,14 +434,18 @@ static const struct wl_registry_listener registry_listener = {
 int main(int argc, char* argv[])
 {
 	int opt;
-	while ((opt = getopt(argc, argv, "chv")) != -1) {
+	while ((opt = getopt(argc, argv, "chvs:")) != -1) {
 		switch (opt) {
+			case 's':
+				statusFifoName = optarg;
+				break;
 			case 'h':
-				printf("Usage: %s [-h] [-v] [-c command]\n", argv[0]);
+				printf("Usage: %s [-h] [-v] [-s path to the fifo] [-c command]\n", argv[0]);
 				printf("  -h: Show this help\n");
 				printf("  -v: Show somebar version\n");
+				printf("  -s: Change path to the fifo (default is \"$XDG_RUNTIME_DIR/somebar-0\")\n");
 				printf("  -c: Sends a command to sombar. See README for details.\n");
-				printf("If any of these are specified, somebar exits after the action.\n");
+				printf("If any of these are specified (except -s), somebar exits after the action.\n");
 				printf("Otherwise, somebar will display itself.\n");
 				exit(0);
 			case 'v':
@@ -437,9 +455,14 @@ int main(int argc, char* argv[])
 				if (optind >= argc) {
 					die("Expected command");
 				}
-				auto path = std::string {getenv("XDG_RUNTIME_DIR")} + "/somebar-0";
-				int fd = open(path.c_str(), O_WRONLY | O_CLOEXEC);
-				if (fd < 0) {
+				std::string path;
+				if (statusFifoName.empty()) {
+					path = std::string {getenv("XDG_RUNTIME_DIR")} + "/somebar-0";
+				} else {
+					path = statusFifoName;
+				}
+				statusFifoWriter = open(path.c_str(), O_WRONLY | O_CLOEXEC);
+				if (statusFifoWriter < 0) {
 					fprintf(stderr, "could not open %s: ", path.c_str());
 					perror("");
 					exit(1);
@@ -450,7 +473,7 @@ int main(int argc, char* argv[])
 					str += argv[i];
 				}
 				str += "\n";
-				write(fd, str.c_str(), str.size());
+				write(statusFifoWriter, str.c_str(), str.size());
 				exit(0);
 		}
 	}
