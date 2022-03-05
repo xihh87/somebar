@@ -455,15 +455,12 @@ int main(int argc, char* argv[])
 				if (optind >= argc) {
 					die("Expected command");
 				}
-				std::string path;
 				if (statusFifoName.empty()) {
-					path = std::string {getenv("XDG_RUNTIME_DIR")} + "/somebar-0";
-				} else {
-					path = statusFifoName;
+					statusFifoName = std::string {getenv("XDG_RUNTIME_DIR")} + "/somebar-0";
 				}
-				statusFifoWriter = open(path.c_str(), O_WRONLY | O_CLOEXEC);
+				statusFifoWriter = open(statusFifoName.c_str(), O_WRONLY | O_CLOEXEC);
 				if (statusFifoWriter < 0) {
-					fprintf(stderr, "could not open %s: ", path.c_str());
+					fprintf(stderr, "could not open %s: ", statusFifoName.c_str());
 					perror("");
 					exit(1);
 				}
