@@ -494,6 +494,12 @@ int main(int argc, char* argv[])
 		diesys("sigaction");
 	}
 
+	struct sigaction chld_handler = {};
+	chld_handler.sa_handler = SIG_IGN;
+	if (sigaction(SIGCHLD, &chld_handler, nullptr) < 0) {
+		die("sigaction");
+	}
+
 	pollfds.push_back({
 		.fd = signalSelfPipe[0],
 		.events = POLLIN,
