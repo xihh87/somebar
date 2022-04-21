@@ -27,3 +27,5 @@ executable('somebar',
 	],
 	install: true,
 	cpp_args: '-DSOMEBAR_VERSION="@0@"'.format(meson.project_version()))
+
+install_man('somebar.1')

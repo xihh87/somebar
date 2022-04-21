@@ -2,8 +2,6 @@
 
 ![Screenshot](screenshot.png)
 
-This project is rather new. Beware of bugs.
-
 The mailing list for this project is
 [~raphi/public-inbox@lists.sr.ht](mailto:~raphi/public-inbox@lists.sr.ht).
 
